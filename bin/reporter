@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# bin/reporter — forward Claude Code hook events to the VS Code extension socket
+#
+# Claude Code calls this script for each hook event.  The hook data arrives via
+# stdin as a JSON object (e.g. {"session_id":"…","hook_event_name":"Stop"}).
+# We translate that into our own NDJSON schema and send it to VSCODE_CLAUDE_SOCKET.
+#
+# Optional arguments:
+#   --save-session FILE   Write the session_id to FILE (used by bin/claude for
+#                         the session_end event fired from its EXIT trap).
+#   --source NAME         Set the source field in emitted events (default: "claude")
+
+[ -z "${VSCODE_CLAUDE_SOCKET:-}" ] && exit 0
+
+_SAVE_SESSION=""
+_PID="0"
+_SOURCE="claude"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --save-session) _SAVE_SESSION="$2"; shift 2 ;;
+    --pid) _PID="$2"; shift 2 ;;
+    --source) _SOURCE="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
+# Read all hook data from stdin (Claude Code writes JSON here)
+_HOOK_INPUT="$(cat)"
+[ -z "${_HOOK_INPUT}" ] && exit 0
+
+export _HOOK_INPUT _SAVE_SESSION _PID _SOURCE
+export _HOOK_SOCK="${VSCODE_CLAUDE_SOCKET}"
+
+# Use Python 3 (always present on macOS) for safe JSON parsing and socket I/O.
+# Note: hook_event_name key is what Claude Code sends; verify with:
+#   https://docs.anthropic.com/en/docs/claude-code/hooks
+python3 -c "
+import json, os, socket, sys
+
+try:
+    data = json.loads(os.environ['_HOOK_INPUT'])
+except Exception:
+    sys.exit(0)
+
+sid  = data.get('session_id', '')
+hook = data.get('hook_event_name', '')
+sf   = os.environ.get('_SAVE_SESSION', '')
+
+if sf and sid:
+    with open(sf, 'w') as f:
+        f.write(sid)
+
+EVENT_MAP = {
+    'SessionStart':     'session_start',
+    'UserPromptSubmit': 'user_prompt_submit',
+    'PreToolUse':       'pre_tool_use',
+    'Stop':             'stop',
+}
+
+evt = EVENT_MAP.get(hook)
+if not (evt and sid):
+    sys.exit(0)
+
+source = os.environ.get('_SOURCE', 'claude')
+
+try:
+    pid_num = int(os.environ.get('_PID', '0'))
+except (ValueError, TypeError):
+    pid_num = 0
+event = {'event': evt, 'session_id': sid}
+event['source'] = source
+if hook == 'SessionStart':
+    event['pid'] = pid_num
+    # Extract git branch from the session's working directory
+    import subprocess
+    cwd = data.get('cwd', '')
+    if cwd:
+        event['cwd'] = cwd
+        try:
+            branch = subprocess.check_output(
+                ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                cwd=cwd, stderr=subprocess.DEVNULL, timeout=2,
+            ).decode().strip()
+            if branch and branch != 'HEAD':
+                event['branch'] = branch
+        except Exception:
+            pass
+elif hook == 'Stop':
+    sr = data.get('stop_reason', '')
+    if sr:
+        event['stop_reason'] = sr
+elif hook == 'UserPromptSubmit':
+    event['prompt'] = data.get('prompt', '')
+elif hook == 'PreToolUse':
+    event['tool_name'] = data.get('tool_name', '')
+
+line = json.dumps(event) + chr(10)
+sock_path = os.environ.get('_HOOK_SOCK', '')
+try:
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(1)
+    s.connect(sock_path)
+    s.sendall(line.encode())
+    s.close()
+except Exception:
+    pass
+" 2>/dev/null || true

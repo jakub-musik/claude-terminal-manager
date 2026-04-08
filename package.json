@@ -1,0 +1,361 @@
+{
+  "name": "claude-terminal-manager",
+  "displayName": "Agent Terminal Manager",
+  "description": "Track AI agent sessions (Claude, Codex) in VS Code terminals with sidebar panel",
+  "version": "1.1.12",
+  "publisher": "jakub-musik",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Machine Learning"
+  ],
+  "keywords": [
+    "claude",
+    "terminal",
+    "ai",
+    "session",
+    "claude-code",
+    "codex"
+  ],
+  "icon": "resources/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jakub-musik/claude-terminal-manager"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.cjs",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "claudeTerminalManagerSidebar",
+          "title": "Agent Terminal Manager",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "claudeTerminalManagerSidebar": [
+        {
+          "id": "claudeTerminalManagerPanel",
+          "name": "Terminals",
+          "icon": "resources/icon.svg",
+          "contextualTitle": "Agent Terminal Manager",
+          "visibility": "visible"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "claudeTerminalManager.renameSession",
+        "title": "Rename",
+        "icon": "$(pencil)",
+        "category": "Agent Terminal Manager"
+      },
+      {
+        "command": "claudeTerminalManager.focusTerminal",
+        "title": "Focus Terminal",
+        "icon": "$(arrow-right)",
+        "category": "Agent Terminal Manager"
+      },
+      {
+        "command": "claudeTerminalManager.focusRemoteTerminal",
+        "title": "Focus Remote Terminal",
+        "icon": "$(arrow-right)",
+        "category": "Agent Terminal Manager"
+      },
+      {
+        "command": "claudeTerminalManager.focusWindow",
+        "title": "Focus Window",
+        "icon": "$(window)",
+        "category": "Agent Terminal Manager"
+      },
+      {
+        "command": "claudeTerminalManager.resetState",
+        "title": "Reset Terminal State",
+        "icon": "$(trash)",
+        "category": "Agent Terminal Manager"
+      },
+      {
+        "command": "claudeTerminalManager.closeTerminal",
+        "title": "Close Terminal",
+        "icon": "$(trash)",
+        "category": "Agent Terminal Manager"
+      },
+      {
+        "command": "claudeTerminalManager.installHooks",
+        "title": "Install Hooks",
+        "category": "Agent Terminal Manager"
+      },
+      {
+        "command": "claudeTerminalManager.removeHooks",
+        "title": "Remove Hooks",
+        "category": "Agent Terminal Manager"
+      },
+      {
+        "command": "claudeTerminalManager.checkHooks",
+        "title": "Check Hooks Status",
+        "category": "Agent Terminal Manager"
+      },
+      {
+        "command": "claudeTerminalManager.focusTerminalByIndex",
+        "title": "Focus Terminal by Index",
+        "category": "Agent Terminal Manager"
+      },
+      {
+        "command": "claudeTerminalManager.expandAll",
+        "title": "Expand All",
+        "icon": "$(expand-all)",
+        "category": "Agent Terminal Manager"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "claudeTerminalManager.expandAll",
+          "when": "view == claudeTerminalManagerPanel",
+          "group": "navigation"
+        },
+        {
+          "command": "claudeTerminalManager.resetState",
+          "when": "view == claudeTerminalManagerPanel",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "claudeTerminalManager.closeTerminal",
+          "when": "viewItem == claudeSession",
+          "group": "inline"
+        },
+        {
+          "command": "claudeTerminalManager.closeTerminal",
+          "when": "viewItem == terminal",
+          "group": "inline"
+        }
+      ]
+    },
+    "configuration": [
+      {
+        "title": "Agent Terminal Manager",
+        "properties": {
+          "claudeTerminalManager.sidebar.showNonClaudeTerminals": {
+          "type": "boolean",
+          "default": false,
+          "description": "List all terminals in the sidebar, not just Claude sessions"
+        },
+        "claudeTerminalManager.status.verboseToolNames": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show tool name in status bar during PreToolUse (e.g. Running: Bash)"
+        },
+        "claudeTerminalManager.sidebar.showTerminalsFromAllWindows": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show terminals from all VS Code windows in the sidebar, not just the current window. Remote terminals show the project name next to their label."
+        },
+        "claudeTerminalManager.keyboard.enableTerminalShortcuts": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable Ctrl+Alt+0–9 shortcuts to focus terminals by their position in the sidebar"
+        }
+      }
+    },
+    {
+      "title": "Agent Terminal Manager — Hooks",
+      "properties": {
+        "claudeTerminalManager.hooks.manage": {
+          "type": "null",
+          "markdownDescription": "Manage agent hooks in `~/.claude/settings.json` and `~/.codex/hooks.json`:\n\n[$(plug) Install Hooks](command:claudeTerminalManager.installHooks) | [$(trash) Remove Hooks](command:claudeTerminalManager.removeHooks) | [$(search) Check Status](command:claudeTerminalManager.checkHooks)"
+        }
+      }
+    }
+    ],
+    "keybindings": [
+      {
+        "command": "claudeTerminalManager.focusTerminalByIndex",
+        "key": "ctrl+alt+0",
+        "mac": "ctrl+alt+0",
+        "when": "config.claudeTerminalManager.keyboard.enableTerminalShortcuts",
+        "args": { "index": 0 }
+      },
+      {
+        "command": "claudeTerminalManager.focusTerminalByIndex",
+        "key": "ctrl+alt+1",
+        "mac": "ctrl+alt+1",
+        "when": "config.claudeTerminalManager.keyboard.enableTerminalShortcuts",
+        "args": { "index": 1 }
+      },
+      {
+        "command": "claudeTerminalManager.focusTerminalByIndex",
+        "key": "ctrl+alt+2",
+        "mac": "ctrl+alt+2",
+        "when": "config.claudeTerminalManager.keyboard.enableTerminalShortcuts",
+        "args": { "index": 2 }
+      },
+      {
+        "command": "claudeTerminalManager.focusTerminalByIndex",
+        "key": "ctrl+alt+3",
+        "mac": "ctrl+alt+3",
+        "when": "config.claudeTerminalManager.keyboard.enableTerminalShortcuts",
+        "args": { "index": 3 }
+      },
+      {
+        "command": "claudeTerminalManager.focusTerminalByIndex",
+        "key": "ctrl+alt+4",
+        "mac": "ctrl+alt+4",
+        "when": "config.claudeTerminalManager.keyboard.enableTerminalShortcuts",
+        "args": { "index": 4 }
+      },
+      {
+        "command": "claudeTerminalManager.focusTerminalByIndex",
+        "key": "ctrl+alt+5",
+        "mac": "ctrl+alt+5",
+        "when": "config.claudeTerminalManager.keyboard.enableTerminalShortcuts",
+        "args": { "index": 5 }
+      },
+      {
+        "command": "claudeTerminalManager.focusTerminalByIndex",
+        "key": "ctrl+alt+6",
+        "mac": "ctrl+alt+6",
+        "when": "config.claudeTerminalManager.keyboard.enableTerminalShortcuts",
+        "args": { "index": 6 }
+      },
+      {
+        "command": "claudeTerminalManager.focusTerminalByIndex",
+        "key": "ctrl+alt+7",
+        "mac": "ctrl+alt+7",
+        "when": "config.claudeTerminalManager.keyboard.enableTerminalShortcuts",
+        "args": { "index": 7 }
+      },
+      {
+        "command": "claudeTerminalManager.focusTerminalByIndex",
+        "key": "ctrl+alt+8",
+        "mac": "ctrl+alt+8",
+        "when": "config.claudeTerminalManager.keyboard.enableTerminalShortcuts",
+        "args": { "index": 8 }
+      },
+      {
+        "command": "claudeTerminalManager.focusTerminalByIndex",
+        "key": "ctrl+alt+9",
+        "mac": "ctrl+alt+9",
+        "when": "config.claudeTerminalManager.keyboard.enableTerminalShortcuts",
+        "args": { "index": 9 }
+      },
+      {
+        "command": "claudeTerminalManager.focusTerminalByIndex",
+        "key": "ctrl+alt+numpad0",
+        "mac": "ctrl+alt+numpad0",
+        "when": "config.claudeTerminalManager.keyboard.enableTerminalShortcuts",
+        "args": { "index": 0 }
+      },
+      {
+        "command": "claudeTerminalManager.focusTerminalByIndex",
+        "key": "ctrl+alt+numpad1",
+        "mac": "ctrl+alt+numpad1",
+        "when": "config.claudeTerminalManager.keyboard.enableTerminalShortcuts",
+        "args": { "index": 1 }
+      },
+      {
+        "command": "claudeTerminalManager.focusTerminalByIndex",
+        "key": "ctrl+alt+numpad2",
+        "mac": "ctrl+alt+numpad2",
+        "when": "config.claudeTerminalManager.keyboard.enableTerminalShortcuts",
+        "args": { "index": 2 }
+      },
+      {
+        "command": "claudeTerminalManager.focusTerminalByIndex",
+        "key": "ctrl+alt+numpad3",
+        "mac": "ctrl+alt+numpad3",
+        "when": "config.claudeTerminalManager.keyboard.enableTerminalShortcuts",
+        "args": { "index": 3 }
+      },
+      {
+        "command": "claudeTerminalManager.focusTerminalByIndex",
+        "key": "ctrl+alt+numpad4",
+        "mac": "ctrl+alt+numpad4",
+        "when": "config.claudeTerminalManager.keyboard.enableTerminalShortcuts",
+        "args": { "index": 4 }
+      },
+      {
+        "command": "claudeTerminalManager.focusTerminalByIndex",
+        "key": "ctrl+alt+numpad5",
+        "mac": "ctrl+alt+numpad5",
+        "when": "config.claudeTerminalManager.keyboard.enableTerminalShortcuts",
+        "args": { "index": 5 }
+      },
+      {
+        "command": "claudeTerminalManager.focusTerminalByIndex",
+        "key": "ctrl+alt+numpad6",
+        "mac": "ctrl+alt+numpad6",
+        "when": "config.claudeTerminalManager.keyboard.enableTerminalShortcuts",
+        "args": { "index": 6 }
+      },
+      {
+        "command": "claudeTerminalManager.focusTerminalByIndex",
+        "key": "ctrl+alt+numpad7",
+        "mac": "ctrl+alt+numpad7",
+        "when": "config.claudeTerminalManager.keyboard.enableTerminalShortcuts",
+        "args": { "index": 7 }
+      },
+      {
+        "command": "claudeTerminalManager.focusTerminalByIndex",
+        "key": "ctrl+alt+numpad8",
+        "mac": "ctrl+alt+numpad8",
+        "when": "config.claudeTerminalManager.keyboard.enableTerminalShortcuts",
+        "args": { "index": 8 }
+      },
+      {
+        "command": "claudeTerminalManager.focusTerminalByIndex",
+        "key": "ctrl+alt+numpad9",
+        "mac": "ctrl+alt+numpad9",
+        "when": "config.claudeTerminalManager.keyboard.enableTerminalShortcuts",
+        "args": { "index": 9 }
+      }
+    ],
+    "configurationDefaults": {
+      "terminal.integrated.commandsToSkipShell": [
+        "claudeTerminalManager.focusTerminalByIndex"
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "node esbuild.mjs",
+    "typecheck": "tsc --noEmit",
+    "watch": "node esbuild.mjs --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "pretest:e2e": "tsc -p test/tsconfig.json",
+    "test:e2e": "vscode-test",
+    "lint": "eslint src --ext ts",
+    "build-install": "pnpm compile && pnpm exec vsce package --no-dependencies && code --install-extension $(ls -t claude-terminal-manager-*.vsix | head -1)"
+  },
+  "devDependencies": {
+    "@effect/vitest": "^0.27.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "@vitest/coverage-v8": "^3.0.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.7.1",
+    "esbuild": "^0.27.4",
+    "eslint": "^8.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "@effect/platform": "^0.94.0",
+    "@effect/platform-node": "^0.104.0",
+    "effect": "^3.0.0"
+  }
+}

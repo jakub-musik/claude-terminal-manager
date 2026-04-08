@@ -1,0 +1,9 @@
+out/
+node_modules/
+*.vsix
+.pnpm-store/
+.vscode-test/
+# Local AI workspace and generated helper-script residue.
+_llm/
+__pycache__/
+.DS_Store
