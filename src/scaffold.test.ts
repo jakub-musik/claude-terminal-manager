@@ -226,6 +226,24 @@ describe('package.json manifest (T1.2)', () => {
       const hooksProps = hooksConfig['properties'] as Record<string, Json>
       expect(hooksProps['claudeTerminalManager.hooks.manage']).toBeDefined()
     })
+
+    it('enableTerminalShortcuts description mentions customization', () => {
+      const setting =
+        properties['claudeTerminalManager.keyboard.enableTerminalShortcuts']
+      const desc = setting?.['description'] as string
+      expect(desc).toContain('Customize')
+      expect(desc).toContain('Focus Session')
+    })
+
+    it('has a keyboard.customize entry with markdownDescription linking to customizeShortcuts', () => {
+      const setting =
+        properties['claudeTerminalManager.keyboard.customize']
+      expect(setting).toBeDefined()
+      expect(setting?.['type']).toBe('null')
+      const desc = setting?.['markdownDescription'] as string | undefined
+      expect(desc).toBeDefined()
+      expect(desc).toContain('customizeShortcuts')
+    })
   })
 
   describe('resources/icon.svg', () => {
@@ -327,6 +345,97 @@ describe('README (T4.3)', () => {
   it('(e) README.md is non-trivially long (> 500 chars)', () => {
     const content = readFileSync(readmePath, 'utf8')
     expect(content.length).toBeGreaterThan(500)
+  })
+
+  it('(f) README.md contains keyboard shortcuts section', () => {
+    const content = readFileSync(readmePath, 'utf8')
+    expect(content).toContain('Keyboard Shortcuts')
+    expect(content).toContain('Customizing Shortcuts')
+  })
+
+  it('(g) README.md mentions the Customize Terminal Shortcuts command', () => {
+    const content = readFileSync(readmePath, 'utf8')
+    expect(content).toContain('Customize Terminal Shortcuts')
+  })
+})
+
+describe('individual focus commands (T6.1)', () => {
+  const contributes = (pkg['contributes'] ?? {}) as Json
+  const commands = contributes['commands'] as Json[]
+  const findCmd = (id: string): Json | undefined =>
+    commands.find((c) => c['command'] === id)
+
+  it('(a) focusTerminal0 through focusTerminal9 commands exist', () => {
+    for (let idx = 0; idx <= 9; idx++) {
+      const cmd = findCmd(`claudeTerminalManager.focusTerminal${idx}`)
+      expect(cmd, `focusTerminal${idx} should exist`).toBeDefined()
+      expect(cmd?.['title']).toBe(`Focus Session ${idx}`)
+      expect(cmd?.['category']).toBe('Agent Terminal Manager')
+    }
+  })
+
+  it('(b) focusTerminalByIndex is NOT in contributes.commands', () => {
+    expect(findCmd('claudeTerminalManager.focusTerminalByIndex')).toBeUndefined()
+  })
+
+  it('(c) keybindings use individual commands (not focusTerminalByIndex)', () => {
+    const keybindings = contributes['keybindings'] as Json[]
+    for (const kb of keybindings) {
+      expect(kb['command']).not.toBe('claudeTerminalManager.focusTerminalByIndex')
+    }
+  })
+
+  it('(d) each focusTerminalN has exactly 2 keybindings (regular + numpad)', () => {
+    const keybindings = contributes['keybindings'] as Json[]
+    for (let idx = 0; idx <= 9; idx++) {
+      const matches = keybindings.filter(
+        (kb) => kb['command'] === `claudeTerminalManager.focusTerminal${idx}`,
+      )
+      expect(matches, `focusTerminal${idx} should have 2 keybindings`).toHaveLength(2)
+    }
+  })
+
+  it('(e) keybindings have no args property', () => {
+    const keybindings = contributes['keybindings'] as Json[]
+    for (const kb of keybindings) {
+      expect(kb['args']).toBeUndefined()
+    }
+  })
+
+  it('(f) commandsToSkipShell includes all 10 individual commands', () => {
+    const defaults = contributes['configurationDefaults'] as Json
+    const skipList = defaults['terminal.integrated.commandsToSkipShell'] as string[]
+    for (let idx = 0; idx <= 9; idx++) {
+      expect(skipList).toContain(`claudeTerminalManager.focusTerminal${idx}`)
+    }
+  })
+
+  it('(g) keybindings are gated by enableTerminalShortcuts when clause', () => {
+    const keybindings = contributes['keybindings'] as Json[]
+    for (const kb of keybindings) {
+      expect(kb['when']).toBe('config.claudeTerminalManager.keyboard.enableTerminalShortcuts')
+    }
+  })
+
+  it('4(a) all 10 commands have unique IDs', () => {
+    const focusIds = new Set<string>()
+    for (let idx = 0; idx <= 9; idx++) {
+      focusIds.add(`claudeTerminalManager.focusTerminal${idx}`)
+    }
+    expect(focusIds.size).toBe(10)
+    for (const id of focusIds) {
+      expect(findCmd(id)).toBeDefined()
+    }
+  })
+
+  it('4(d) commandsToSkipShell includes focusTerminalByIndex', () => {
+    const defaults = contributes['configurationDefaults'] as Json
+    const skipList = defaults[
+      'terminal.integrated.commandsToSkipShell'
+    ] as string[]
+    expect(skipList).toContain(
+      'claudeTerminalManager.focusTerminalByIndex',
+    )
   })
 })
 

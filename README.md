@@ -128,6 +128,40 @@ Controls whether the currently running tool name is displayed next to a session 
 
 Controls whether terminals from other VS Code windows appear in the sidebar. When enabled, the sidebar is split into sections: a **local** section for the current window and a **remote** section for each other open VS Code window. Each section header shows the workspace name and git branch. When disabled, only terminals from the current window are shown.
 
+## Keyboard Shortcuts
+
+The extension provides shortcuts to quickly focus terminals and sessions by their sidebar position.
+
+### Enabling Shortcuts
+
+Shortcuts are disabled by default. Enable them in Settings:
+
+1. Open **Settings** (Cmd+, / Ctrl+,)
+2. Search for `claudeTerminalManager.keyboard.enableTerminalShortcuts`
+3. Check the box to enable
+
+### Default Bindings
+
+| Shortcut | Action |
+|----------|--------|
+| Ctrl+Alt+0 | Focus Session 0 (first item in sidebar) |
+| Ctrl+Alt+1 | Focus Session 1 |
+| ... | ... |
+| Ctrl+Alt+9 | Focus Session 9 |
+
+Numpad equivalents (Ctrl+Alt+Numpad0–9) are also bound.
+
+### Customizing Shortcuts
+
+To rebind any shortcut:
+
+1. Open the Command Palette (Cmd+Shift+P / Ctrl+Shift+P)
+2. Run **Agent Terminal Manager: Customize Terminal Shortcuts**
+3. This opens the Keyboard Shortcuts editor filtered to the focus commands
+4. Double-click any entry to assign a new keybinding
+
+Alternatively, open **Keyboard Shortcuts** (Cmd+K Cmd+S) and search for `Focus Session`.
+
 ## Troubleshooting
 
 If sessions are not appearing in the sidebar:

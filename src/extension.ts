@@ -738,47 +738,73 @@ export function activate(context: vscode.ExtensionContext): void {
   )
   context.subscriptions.push(focusDisposable)
 
+  const focusByIndex = (index: number): void => {
+    outputChannel.appendLine(`[CTM] focusByIndex: index=${index}`)
+    const node = provider.getChildByIndex(index)
+    outputChannel.appendLine(
+      `[CTM] focusByIndex: node kind=${node?.kind ?? 'undefined'}`,
+    )
+    if (node === undefined) return
+
+    if (node.kind === 'terminal') {
+      node.terminal.show(false)
+      return
+    }
+    if (node.kind === 'session') {
+      if (node.terminal !== undefined) {
+        node.terminal.show(false)
+      } else {
+        void vscode.window.showInformationMessage(
+          'Terminal not yet correlated — open a terminal manually',
+        )
+      }
+      if (node.record.needsAttention) {
+        provider.clearAttentionLocal(node.record.sessionId)
+        runtime.runFork(
+          Effect.gen(function* () {
+            const sm = yield* SessionManager
+            yield* sm.clearAttention(node.record.sessionId)
+          }),
+        )
+      }
+      return
+    }
+    if (node.kind === 'remoteTerminal') {
+      void vscode.commands.executeCommand(
+        'claudeTerminalManager.focusRemoteTerminal',
+        node,
+      )
+    }
+  }
+
+  for (let idx = 0; idx <= 9; idx++) {
+    const capturedIndex = idx
+    const disposable = vscode.commands.registerCommand(
+      `claudeTerminalManager.focusTerminal${idx}`,
+      () => focusByIndex(capturedIndex),
+    )
+    context.subscriptions.push(disposable)
+  }
+
   const focusByIndexDisposable = vscode.commands.registerCommand(
     'claudeTerminalManager.focusTerminalByIndex',
     (args: { index: number } | undefined) => {
-      outputChannel.appendLine(`[CTM] focusTerminalByIndex: args=${JSON.stringify(args)}`)
       if (args === undefined) return
-      const node = provider.getChildByIndex(args.index)
-      outputChannel.appendLine(`[CTM] focusTerminalByIndex: node kind=${node?.kind ?? 'undefined'}`)
-      if (node === undefined) return
-
-      if (node.kind === 'terminal') {
-        node.terminal.show(false)
-        return
-      }
-      if (node.kind === 'session') {
-        if (node.terminal !== undefined) {
-          node.terminal.show(false)
-        } else {
-          void vscode.window.showInformationMessage(
-            'Terminal not yet correlated — open a terminal manually',
-          )
-        }
-        if (node.record.needsAttention) {
-          provider.clearAttentionLocal(node.record.sessionId)
-          runtime.runFork(
-            Effect.gen(function* () {
-              const sm = yield* SessionManager
-              yield* sm.clearAttention(node.record.sessionId)
-            }),
-          )
-        }
-        return
-      }
-      if (node.kind === 'remoteTerminal') {
-        void vscode.commands.executeCommand(
-          'claudeTerminalManager.focusRemoteTerminal',
-          node,
-        )
-      }
+      focusByIndex(args.index)
     },
   )
   context.subscriptions.push(focusByIndexDisposable)
+
+  const customizeShortcutsDisposable = vscode.commands.registerCommand(
+    'claudeTerminalManager.customizeShortcuts',
+    () => {
+      void vscode.commands.executeCommand(
+        'workbench.action.openGlobalKeybindings',
+        'claudeTerminalManager.focusTerminal',
+      )
+    },
+  )
+  context.subscriptions.push(customizeShortcutsDisposable)
 
   const renameDisposable = vscode.commands.registerCommand(
     'claudeTerminalManager.renameSession',

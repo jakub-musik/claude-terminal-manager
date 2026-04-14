@@ -2107,7 +2107,7 @@ describe('ClaudeTerminalProvider', () => {
     })
 
     // Test 2.4 — Claude session with slug shows slug, Codex shows 'Codex'
-    it('Claude session with slug shows slug, Codex session shows Codex', () => {
+    it('Claude session with slug shows slug, Codex session shows "Codex"', () => {
       ;(vscode.window as unknown as { terminals: unknown[] }).terminals = []
       const claudeRecord = makeRecord({
         sessionId: 'claude-1',
@@ -2138,6 +2138,216 @@ describe('ClaudeTerminalProvider', () => {
 
       expect(claudeItem.label).toBe('fix-auth-bug')
       expect(codexItem.label).toBe('Codex')
+    })
+  })
+
+  // ─── T6.7 shortcut index tests ─────────────────────────────────────────────
+
+  describe('shortcut index (T6.7)', () => {
+    it('2(a) indices are sequential starting from 0', () => {
+      ;(vscode.window as unknown as { terminals: unknown[] }).terminals = []
+      const records = [
+        makeRecord({ sessionId: 's1', status: 'active' }),
+        makeRecord({ sessionId: 's2', status: 'running' }),
+        makeRecord({ sessionId: 's3', status: 'waiting_for_input' }),
+      ]
+      const provider = new ClaudeTerminalProvider((cb) => cb(records))
+      const children = provider.getChildren(localSection)
+
+      const indices = children.map((child) =>
+        provider.getShortcutIndex(child),
+      )
+      expect(indices).toEqual([0, 1, 2])
+    })
+
+    it('2(b) indices recompute after adding/removing sessions', () => {
+      ;(vscode.window as unknown as { terminals: unknown[] }).terminals = []
+      let sessionCallback:
+        | ((sessions: ReadonlyArray<SessionRecord>) => void)
+        | undefined
+      const initialRecords = [
+        makeRecord({ sessionId: 's1', status: 'active' }),
+        makeRecord({ sessionId: 's2', status: 'running' }),
+      ]
+      const provider = new ClaudeTerminalProvider((cb) => {
+        sessionCallback = cb
+        cb(initialRecords)
+      })
+
+      // Verify initial indices
+      const childrenBefore = provider.getChildren(localSection)
+      expect(childrenBefore).toHaveLength(2)
+      expect(provider.getShortcutIndex(childrenBefore[0]!)).toBe(0)
+      expect(provider.getShortcutIndex(childrenBefore[1]!)).toBe(1)
+
+      // Add a third session
+      const updatedRecords = [
+        ...initialRecords,
+        makeRecord({ sessionId: 's3', status: 'active' }),
+      ]
+      sessionCallback?.(updatedRecords)
+
+      const childrenAfter = provider.getChildren(localSection)
+      expect(childrenAfter).toHaveLength(3)
+      expect(provider.getShortcutIndex(childrenAfter[2]!)).toBe(2)
+
+      // Remove first session
+      sessionCallback?.([
+        makeRecord({ sessionId: 's2', status: 'running' }),
+        makeRecord({ sessionId: 's3', status: 'active' }),
+      ])
+
+      const childrenReduced = provider.getChildren(localSection)
+      expect(childrenReduced).toHaveLength(2)
+      expect(provider.getShortcutIndex(childrenReduced[0]!)).toBe(0)
+      expect(provider.getShortcutIndex(childrenReduced[1]!)).toBe(1)
+    })
+
+    it('2(c) getShortcutIndex returns correct index for a given node', () => {
+      ;(vscode.window as unknown as { terminals: unknown[] }).terminals = [
+        { name: 'bash' },
+      ]
+      const records = [
+        makeRecord({ sessionId: 's1', status: 'active' }),
+      ]
+      const provider = new ClaudeTerminalProvider((cb) => cb(records))
+      const children = provider.getChildren(localSection)
+
+      // Find the session node and terminal node
+      const sessionNode = children.find(
+        (node) => node.kind === 'session',
+      )
+      const terminalNode = children.find(
+        (node) => node.kind === 'terminal',
+      )
+
+      expect(sessionNode).toBeDefined()
+      expect(terminalNode).toBeDefined()
+
+      const sessionIdx = provider.getShortcutIndex(sessionNode!)
+      const terminalIdx = provider.getShortcutIndex(terminalNode!)
+
+      // Both should be defined and different
+      expect(sessionIdx).toBeDefined()
+      expect(terminalIdx).toBeDefined()
+      expect(sessionIdx).not.toBe(terminalIdx)
+    })
+
+    it('2(d) all non-section node types receive indices', () => {
+      vi.mocked(getShowTerminalsFromAllWindows).mockReturnValue(true)
+      ;(vscode.window as unknown as { terminals: unknown[] }).terminals = [
+        { name: 'bash' },
+      ]
+      const records = [
+        makeRecord({ sessionId: 's1', status: 'active' }),
+      ]
+      const remoteEntry: WindowEntry = {
+        windowId: 'win-2',
+        workspaceName: 'remote-proj',
+        socketPath: '/tmp/test.sock',
+        terminals: [{ name: 'zsh' }],
+        lastHeartbeat: Date.now(),
+      }
+      const provider = new ClaudeTerminalProvider((cb) => cb(records))
+      provider.refreshRemoteTerminals([remoteEntry])
+
+      // Get local children
+      const localChildren = provider.getChildren(localSection)
+      const sessionNode = localChildren.find(
+        (node) => node.kind === 'session',
+      )
+      const terminalNode = localChildren.find(
+        (node) => node.kind === 'terminal',
+      )
+
+      // Get remote children
+      const remoteSection: SectionNode = {
+        kind: 'section',
+        sectionType: 'remote',
+        windowId: 'win-2',
+        workspaceName: 'remote-proj',
+      }
+      const remoteChildren = provider.getChildren(remoteSection)
+      const remoteTerminalNode = remoteChildren.find(
+        (node) => node.kind === 'remoteTerminal',
+      )
+
+      expect(sessionNode).toBeDefined()
+      expect(terminalNode).toBeDefined()
+      expect(remoteTerminalNode).toBeDefined()
+
+      expect(provider.getShortcutIndex(sessionNode!)).toBeDefined()
+      expect(
+        typeof provider.getShortcutIndex(sessionNode!),
+      ).toBe('number')
+      expect(provider.getShortcutIndex(terminalNode!)).toBeDefined()
+      expect(
+        typeof provider.getShortcutIndex(terminalNode!),
+      ).toBe('number')
+      expect(
+        provider.getShortcutIndex(remoteTerminalNode!),
+      ).toBeDefined()
+      expect(
+        typeof provider.getShortcutIndex(remoteTerminalNode!),
+      ).toBe('number')
+    })
+
+    it('2(e) section nodes do NOT receive indices', () => {
+      ;(vscode.window as unknown as { terminals: unknown[] }).terminals = []
+      const records = [
+        makeRecord({ sessionId: 's1', status: 'active' }),
+      ]
+      const provider = new ClaudeTerminalProvider((cb) => cb(records))
+
+      const root = provider.getChildren()
+      const sections = root.filter((node) => node.kind === 'section')
+      expect(sections.length).toBeGreaterThan(0)
+
+      for (const section of sections) {
+        expect(provider.getShortcutIndex(section)).toBeUndefined()
+      }
+    })
+
+    it('2(f) getChildByIndex returns correct node by flat index', () => {
+      ;(vscode.window as unknown as { terminals: unknown[] }).terminals = [
+        { name: 'bash' },
+        { name: 'zsh' },
+      ]
+      const records = [
+        makeRecord({ sessionId: 's1', status: 'active' }),
+      ]
+      const provider = new ClaudeTerminalProvider((cb) => cb(records))
+      const children = provider.getChildren(localSection)
+
+      // Each child should match getChildByIndex
+      for (let idx = 0; idx < children.length; idx++) {
+        const node = provider.getChildByIndex(idx)
+        expect(node).toBeDefined()
+        expect(node?.kind).toBe(children[idx]!.kind)
+      }
+
+      // Out of range returns undefined
+      expect(provider.getChildByIndex(999)).toBeUndefined()
+    })
+
+    it('2(g) shortcut index appears in tree item labels', () => {
+      ;(vscode.window as unknown as { terminals: unknown[] }).terminals = [
+        { name: 'bash' },
+      ]
+      const records = [
+        makeRecord({ sessionId: 's1', status: 'active' }),
+      ]
+      const provider = new ClaudeTerminalProvider((cb) => cb(records))
+      const children = provider.getChildren(localSection)
+
+      expect(children.length).toBeGreaterThanOrEqual(2)
+
+      const item0 = provider.getTreeItem(children[0]!)
+      const item1 = provider.getTreeItem(children[1]!)
+
+      // Labels should start with "N: "
+      expect(item0.label as string).toMatch(/^0: /)
+      expect(item1.label as string).toMatch(/^1: /)
     })
   })
 })
