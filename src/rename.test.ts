@@ -8,9 +8,10 @@ const { mockDispose, mockRunFork } = vi.hoisted(() => ({
 vi.mock('vscode', () => ({
   env: { appName: 'Code' },
   Uri: {
-    from: vi.fn((components: { scheme: string; path: string }) => ({
+    from: vi.fn((components: { scheme: string; path: string; query?: string }) => ({
       scheme: components.scheme,
       path: components.path,
+      query: components.query ?? '',
       toString: () => `${components.scheme}:${components.path}`,
     })),
   },
@@ -416,7 +417,7 @@ describe('ClaudeTerminalProvider with workspaceState', () => {
     expect(item.label).toBe('Claude')
   })
 
-  it('workspaceState name prefixed with red dot when waiting_for_input', () => {
+  it('workspaceState name has a right-aligned filled dot when waiting_for_input', () => {
     const ws = makeWorkspaceState()
     ws.get.mockReturnValue('My Session')
 
@@ -431,7 +432,10 @@ describe('ClaudeTerminalProvider with workspaceState', () => {
     const node: SessionNode = { kind: 'session', record, terminal: undefined }
     const item = provider.getTreeItem(node)
 
-    expect(item.label).toBe('● My Session')
+    expect(item.label).toBe('My Session')
+    expect((item.resourceUri as { query: string }).query).toBe(
+      'status=%E2%97%8F',
+    )
   })
 
   it('getTreeItem works without workspaceState (undefined)', () => {
@@ -443,4 +447,3 @@ describe('ClaudeTerminalProvider with workspaceState', () => {
     expect(item.label).toBe('Claude')
   })
 })
-

@@ -12,6 +12,7 @@ import {
   getShowNonClaudeTerminals,
   getVerboseToolNames,
   getShowTerminalsFromAllWindows,
+  getUseMacOSAccessibilityForWindowFocus,
 } from './settings.js'
 import * as vscode from 'vscode'
 
@@ -99,6 +100,31 @@ describe('settings', () => {
       mockGet.mockReturnValue(false)
       const result = getShowTerminalsFromAllWindows()
       expect(result).toBe(false)
+    })
+  })
+
+  describe('getUseMacOSAccessibilityForWindowFocus', () => {
+    it('reads windowFocus.useMacOSAccessibility with a false default', () => {
+      mockGet.mockReturnValue(true)
+
+      const result = getUseMacOSAccessibilityForWindowFocus()
+
+      expect(vscode.workspace.getConfiguration).toHaveBeenCalledWith(
+        'claudeTerminalManager',
+      )
+      expect(mockGet).toHaveBeenCalledWith(
+        'windowFocus.useMacOSAccessibility',
+        false,
+      )
+      expect(result).toBe(true)
+    })
+
+    it('returns the default false when the setting is absent', () => {
+      mockGet.mockImplementation(
+        (_key: string, defaultValue: boolean) => defaultValue,
+      )
+
+      expect(getUseMacOSAccessibilityForWindowFocus()).toBe(false)
     })
   })
 })

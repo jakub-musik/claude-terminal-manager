@@ -106,7 +106,7 @@ export class ClaudeTerminalProvider
     ) => void,
     private readonly _onTerminalClosed?: (terminalPid: number) => void,
     private readonly _workspaceState?: vscode.Memento,
-    private readonly _extensionUri?: vscode.Uri,
+    _extensionUri?: vscode.Uri,
   ) {
     this._initTerminalPidMap()
 
@@ -355,10 +355,39 @@ export class ClaudeTerminalProvider
     }))
   }
 
-  private _getSourceIcon(source: string): vscode.Uri | vscode.ThemeIcon {
-    if (this._extensionUri === undefined) return new vscode.ThemeIcon('robot')
-    const iconFile = source === 'codex' ? 'codex-ai.svg' : 'claude-icon.svg'
-    return vscode.Uri.joinPath(this._extensionUri, 'resources', iconFile)
+  private _getSessionStatusBadge(
+    status: string,
+    needsAttention: boolean,
+  ): string | undefined {
+    if (needsAttention) return '●'
+    if (status === 'running') return '↻'
+    if (status === 'waiting_for_input') return '○'
+    return undefined
+  }
+
+  private _getSessionDescription(
+    status: string,
+    statusLabel: string | undefined,
+    subtitle: string | undefined,
+  ): string | undefined {
+    if (status !== 'running') return subtitle
+    return [statusLabel ?? 'Running', subtitle]
+      .filter((part): part is string => part !== undefined)
+      .join(' — ')
+  }
+
+  private _getSessionResourceUri(
+    scheme: 'ctm' | 'ctm-status',
+    path: string,
+    statusBadge: string | undefined,
+  ): vscode.Uri {
+    return vscode.Uri.from({
+      scheme,
+      path,
+      ...(statusBadge === undefined
+        ? {}
+        : { query: `status=${encodeURIComponent(statusBadge)}` }),
+    })
   }
 
   getTreeItem(node: TreeNode): vscode.TreeItem {
@@ -418,92 +447,111 @@ export class ClaudeTerminalProvider
       const isActiveTerminal = node.terminal !== undefined
         && node.terminal === vscode.window.activeTerminal
       const effectiveNeedsAttention = node.record.needsAttention && (!isActiveTerminal || node.record.activeBlockingTool !== undefined)
-      const decoratedLabel = effectiveNeedsAttention
-        ? `● ${baseLabel}`
-        : node.record.status === 'waiting_for_input'
-          ? `○ ${baseLabel}`
-          : baseLabel
       const sessionShortcutIdx = this.getShortcutIndex(node)
       const label = sessionShortcutIdx !== undefined
-        ? `${sessionShortcutIdx}: ${decoratedLabel}`
-        : decoratedLabel
+        ? `${sessionShortcutIdx}: ${baseLabel}`
+        : baseLabel
       const item = new vscode.TreeItem(
         label,
         vscode.TreeItemCollapsibleState.None,
       )
-      item.iconPath = this._getSourceIcon(node.record.source)
       item.contextValue = 'claudeSession'
       item.command = {
         command: 'claudeTerminalManager.focusTerminal',
         title: 'Focus Terminal',
         arguments: [node],
       }
-      const descParts = [
-        node.record.subtitle,
+      const statusBadge = this._getSessionStatusBadge(
+        node.record.status,
+        effectiveNeedsAttention,
+      )
+      const description = this._getSessionDescription(
+        node.record.status,
         node.record.statusLabel,
-      ].filter((s): s is string => s !== undefined)
-      if (descParts.length > 0) {
-        item.description = descParts.join(' — ')
+        node.record.subtitle,
+      )
+      if (description !== undefined) {
+        item.description = description
       }
       const toolName = node.record.source === 'codex' ? 'Codex' : 'Claude'
+      const runningTooltip = node.record.status === 'running'
+        ? `\n\n${node.record.statusLabel ?? 'Running'}`
+        : ''
       item.tooltip = new vscode.MarkdownString(
         `**${toolName} Session:** ` +
           node.record.sessionId +
           '\n\n' +
-          (node.record.subtitle ?? 'No prompt yet'),
+          (node.record.subtitle ?? 'No prompt yet') +
+          runningTooltip,
       )
       item.accessibilityInformation = {
-        label: baseLabel + ': ' + (node.record.subtitle ?? 'waiting'),
+        label:
+          baseLabel +
+          ': ' +
+          (node.record.subtitle ?? 'waiting') +
+          (node.record.status === 'running' ? ', running' : ''),
       }
-      item.resourceUri = vscode.Uri.from({ scheme: 'ctm', path: '/session/' + node.record.sessionId })
+      item.resourceUri = this._getSessionResourceUri(
+        'ctm',
+        '/session/' + node.record.sessionId,
+        statusBadge,
+      )
       return item
     }
 
     if (node.kind === 'remoteTerminal') {
       const hasSession = node.session !== undefined
-      const isWaiting = node.session?.status === 'waiting_for_input'
       const needsAttention = node.session?.needsAttention ?? false
       const remoteSource = node.session?.source ?? 'claude'
       const remoteFallback = remoteSource === 'codex' ? 'Codex' : 'Claude'
       const baseLabel = hasSession
         ? (node.session.slug ?? remoteFallback)
         : node.terminalName
-      const remoteDecoratedLabel = needsAttention
-        ? `● ${baseLabel}`
-        : isWaiting
-          ? `○ ${baseLabel}`
-          : baseLabel
       const remoteShortcutIdx = this.getShortcutIndex(node)
       const label = remoteShortcutIdx !== undefined
-        ? `${remoteShortcutIdx}: ${remoteDecoratedLabel}`
-        : remoteDecoratedLabel
+        ? `${remoteShortcutIdx}: ${baseLabel}`
+        : baseLabel
       const item = new vscode.TreeItem(
         label,
         vscode.TreeItemCollapsibleState.None,
       )
-      item.iconPath =
-        hasSession
-          ? this._getSourceIcon(remoteSource)
-          : new vscode.ThemeIcon('terminal-tmux')
+      if (!hasSession) {
+        item.iconPath = new vscode.ThemeIcon('terminal-tmux')
+      }
       item.contextValue = 'remoteTerminal'
       item.command = {
         command: 'claudeTerminalManager.focusRemoteTerminal',
         title: 'Focus Remote Terminal',
         arguments: [node],
       }
-      if (hasSession) {
-        const descParts = [
-          node.session.subtitle,
+      if (node.session !== undefined) {
+        const statusBadge = this._getSessionStatusBadge(
+          node.session.status,
+          needsAttention,
+        )
+        const description = this._getSessionDescription(
+          node.session.status,
           node.session.statusLabel,
-        ].filter((s): s is string => s !== undefined)
-        if (descParts.length > 0) {
-          item.description = descParts.join(' — ')
+          node.session.subtitle,
+        )
+        if (description !== undefined) {
+          item.description = description
         }
+        item.resourceUri = this._getSessionResourceUri(
+          'ctm-status',
+          `/remote-session/${node.windowId}/${node.session.sessionId}`,
+          statusBadge,
+        )
       }
       const remoteToolName = remoteSource === 'codex' ? 'Codex' : 'Claude'
+      const remoteRunningTooltip = node.session?.status === 'running'
+        ? `\n\n${node.session.statusLabel ?? 'Running'}`
+        : ''
       item.tooltip = new vscode.MarkdownString(
         hasSession
-          ? `**Remote ${remoteToolName} session** in window: ` + node.workspaceName
+          ? `**Remote ${remoteToolName} session** in window: ` +
+            node.workspaceName +
+            remoteRunningTooltip
           : '**Remote terminal** in window: ' + node.workspaceName,
       )
       return item
@@ -512,32 +560,42 @@ export class ClaudeTerminalProvider
     if (node.kind === 'remoteSession') {
       const rsToolName = (node.source ?? 'claude') === 'codex' ? 'Codex' : 'Claude'
       const baseLabel = `${rsToolName}: ${node.sessionId.slice(0, 8)}`
-      const needsAttention = node.needsAttention ?? true
-      const rsDecoratedLabel = needsAttention
-        ? `● ${baseLabel}`
-        : node.status === 'waiting_for_input'
-          ? `○ ${baseLabel}`
-          : baseLabel
+      const needsAttention =
+        node.needsAttention ?? node.status === 'waiting_for_input'
       const rsShortcutIdx = this.getShortcutIndex(node)
       const label = rsShortcutIdx !== undefined
-        ? `${rsShortcutIdx}: ${rsDecoratedLabel}`
-        : rsDecoratedLabel
+        ? `${rsShortcutIdx}: ${baseLabel}`
+        : baseLabel
       const item = new vscode.TreeItem(
         label,
         vscode.TreeItemCollapsibleState.None,
       )
-      item.iconPath = this._getSourceIcon(node.source ?? 'claude')
-      const descParts = [node.subtitle, node.statusLabel].filter(
-        (s): s is string => s !== undefined,
+      const statusBadge = this._getSessionStatusBadge(
+        node.status,
+        needsAttention,
       )
-      if (descParts.length > 0) {
-        item.description = descParts.join(' — ')
+      const description = this._getSessionDescription(
+        node.status,
+        node.statusLabel,
+        node.subtitle,
+      )
+      if (description !== undefined) {
+        item.description = description
       }
+      const rsRunningTooltip = node.status === 'running'
+        ? `\n\n${node.statusLabel ?? 'Running'}`
+        : ''
       item.tooltip = new vscode.MarkdownString(
         '**Session:** ' +
           node.sessionId +
           '\n\n' +
-          (node.subtitle ?? 'No prompt yet'),
+          (node.subtitle ?? 'No prompt yet') +
+          rsRunningTooltip,
+      )
+      item.resourceUri = this._getSessionResourceUri(
+        'ctm-status',
+        '/remote-session/' + node.sessionId,
+        statusBadge,
       )
       return item
     }

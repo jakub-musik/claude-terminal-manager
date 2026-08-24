@@ -14,3 +14,8 @@ export const getShowTerminalsFromAllWindows = (): boolean =>
   vscode.workspace
     .getConfiguration('claudeTerminalManager')
     .get<boolean>('sidebar.showTerminalsFromAllWindows', true)
+
+export const getUseMacOSAccessibilityForWindowFocus = (): boolean =>
+  vscode.workspace
+    .getConfiguration('claudeTerminalManager')
+    .get<boolean>('windowFocus.useMacOSAccessibility', false)

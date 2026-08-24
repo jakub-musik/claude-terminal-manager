@@ -13,10 +13,13 @@ vi.mock('vscode', () => ({
     }),
   },
   Uri: {
-    from: vi.fn((components: { scheme: string; path: string }) => ({
+    from: vi.fn((components: { scheme: string; path: string; query?: string }) => ({
       scheme: components.scheme,
       path: components.path,
-      toString: () => `${components.scheme}:${components.path}`,
+      query: components.query ?? '',
+      toString: () =>
+        `${components.scheme}:${components.path}` +
+        (components.query === undefined ? '' : `?${components.query}`),
     })),
     joinPath: vi.fn((base: { fsPath: string }, ...pathSegments: string[]) => ({
       fsPath: [base.fsPath, ...pathSegments].join('/'),
@@ -395,7 +398,9 @@ describe('ClaudeTerminalProvider', () => {
       const node = { kind: 'session' as const, record, terminal: undefined }
       const provider = new ClaudeTerminalProvider()
       const item = provider.getTreeItem(node as never)
-      expect(item.label).toMatch(/●/)
+      expect((item.resourceUri as { query: string }).query).toBe(
+        'status=%E2%97%8F',
+      )
       expect(item.label as string).toContain('Claude')
     })
 
@@ -411,7 +416,9 @@ describe('ClaudeTerminalProvider', () => {
       const node = { kind: 'session' as const, record, terminal: terminal as never }
       const provider = new ClaudeTerminalProvider()
       const item = provider.getTreeItem(node as never)
-      expect(item.label as string).toContain('○')
+      expect((item.resourceUri as { query: string }).query).toBe(
+        'status=%E2%97%8B',
+      )
       expect(item.label as string).not.toContain('●')
     })
 
@@ -428,7 +435,9 @@ describe('ClaudeTerminalProvider', () => {
       const node = { kind: 'session' as const, record, terminal: terminal as never }
       const provider = new ClaudeTerminalProvider()
       const item = provider.getTreeItem(node as never)
-      expect(item.label as string).toContain('●')
+      expect((item.resourceUri as { query: string }).query).toBe(
+        'status=%E2%97%8F',
+      )
       expect(item.label as string).not.toContain('○')
     })
 
@@ -445,7 +454,9 @@ describe('ClaudeTerminalProvider', () => {
       const node = { kind: 'session' as const, record, terminal: terminal as never }
       const provider = new ClaudeTerminalProvider()
       const item = provider.getTreeItem(node as never)
-      expect(item.label as string).toContain('●')
+      expect((item.resourceUri as { query: string }).query).toBe(
+        'status=%E2%97%8F',
+      )
     })
 
     it('(b2) waiting_for_input with needsAttention=false shows hollow dot ○', () => {
@@ -458,7 +469,9 @@ describe('ClaudeTerminalProvider', () => {
       const node = { kind: 'session' as const, record, terminal: undefined }
       const provider = new ClaudeTerminalProvider()
       const item = provider.getTreeItem(node as never)
-      expect(item.label).toMatch(/○/)
+      expect((item.resourceUri as { query: string }).query).toBe(
+        'status=%E2%97%8B',
+      )
       expect(item.label as string).toContain('Claude')
       expect(item.label as string).not.toContain('●')
     })
@@ -585,11 +598,12 @@ describe('ClaudeTerminalProvider', () => {
       expect(item.contextValue).toBe('claudeSession')
     })
 
-    it('sets description to subtitle when present', () => {
+    it('keeps subtitle in the description', () => {
       const record = makeRecord({ subtitle: 'Hello world prompt' })
       const node = { kind: 'session' as const, record, terminal: undefined }
       const provider = new ClaudeTerminalProvider()
       const item = provider.getTreeItem(node as never)
+      expect(item.label).toBe('Claude')
       expect(item.description).toBe('Hello world prompt')
     })
 
@@ -601,31 +615,62 @@ describe('ClaudeTerminalProvider', () => {
       expect(item.description).toBeUndefined()
     })
 
-    it('(d) description includes statusLabel when set', () => {
+    it('(d) uses the complete running status as the right-aligned description', () => {
       const record = makeRecord({
+        status: 'running',
         subtitle: 'do work',
         statusLabel: 'Running: Bash',
       })
       const node = { kind: 'session' as const, record, terminal: undefined }
       const provider = new ClaudeTerminalProvider()
       const item = provider.getTreeItem(node as never)
-      expect(item.description).toBe('do work — Running: Bash')
+      expect(item.label).toBe('Claude')
+      expect(item.description).toBe('Running: Bash — do work')
+      expect((item.resourceUri as { query: string }).query).toBe(
+        'status=%E2%86%BB',
+      )
     })
 
-    it('(d2) description is only statusLabel when subtitle is absent', () => {
-      const record = makeRecord({ subtitle: undefined, statusLabel: 'Running: Read' })
+    it('(d2) shows running status when subtitle is absent', () => {
+      const record = makeRecord({
+        status: 'running',
+        subtitle: undefined,
+        statusLabel: 'Running: Read',
+      })
       const node = { kind: 'session' as const, record, terminal: undefined }
       const provider = new ClaudeTerminalProvider()
       const item = provider.getTreeItem(node as never)
       expect(item.description).toBe('Running: Read')
+      expect((item.resourceUri as { query: string }).query).toBe(
+        'status=%E2%86%BB',
+      )
     })
 
-    it('uses robot ThemeIcon', () => {
+    it('(d3) shows a generic running status when verbose tool names are disabled', () => {
+      const record = makeRecord({ status: 'running', statusLabel: undefined })
+      const node = { kind: 'session' as const, record, terminal: undefined }
+      const provider = new ClaudeTerminalProvider()
+      const item = provider.getTreeItem(node as never)
+      expect(item.description).toBe('Running')
+      expect((item.resourceUri as { query: string }).query).toBe(
+        'status=%E2%86%BB',
+      )
+    })
+
+    it('(d4) has no status description for a non-running active session', () => {
+      const record = makeRecord({ status: 'active', statusLabel: undefined })
+      const node = { kind: 'session' as const, record, terminal: undefined }
+      const provider = new ClaudeTerminalProvider()
+      const item = provider.getTreeItem(node as never)
+      expect((item.resourceUri as { query: string }).query).toBe('')
+    })
+
+    it('does not show a redundant CLI icon', () => {
       const record = makeRecord({ status: 'active' })
       const node = { kind: 'session' as const, record, terminal: undefined }
       const provider = new ClaudeTerminalProvider()
       const item = provider.getTreeItem(node as never)
-      expect((item.iconPath as { id: string }).id).toBe('robot')
+      expect(item.iconPath).toBeUndefined()
     })
 
     it('tooltip contains session ID', () => {
@@ -1429,19 +1474,23 @@ describe('ClaudeTerminalProvider', () => {
       ;(vscode.window as unknown as { terminals: unknown[] }).terminals = []
       const provider = new ClaudeTerminalProvider((cb) => cb([record]))
 
-      // Before: shows ●
+      // Before: shows ● at the right edge
       const childrenBefore = provider.getChildren(localSection)
       const nodeBefore = childrenBefore[0] as SessionNode
       const itemBefore = provider.getTreeItem(nodeBefore)
-      expect(itemBefore.label as string).toContain('●')
+      expect((itemBefore.resourceUri as { query: string }).query).toBe(
+        'status=%E2%97%8F',
+      )
 
       provider.clearAttentionLocal('sess1')
 
-      // After: shows ○
+      // After: shows ○ at the right edge
       const childrenAfter = provider.getChildren(localSection)
       const nodeAfter = childrenAfter[0] as SessionNode
       const itemAfter = provider.getTreeItem(nodeAfter)
-      expect(itemAfter.label as string).toContain('○')
+      expect((itemAfter.resourceUri as { query: string }).query).toBe(
+        'status=%E2%97%8B',
+      )
       expect(itemAfter.label as string).not.toContain('●')
     })
   })
@@ -1697,10 +1746,10 @@ describe('ClaudeTerminalProvider', () => {
 
   // ─── T5.7 tests ───────────────────────────────────────────────────────────
 
-  describe('source-based icons (T5.7)', () => {
+  describe('source labels without redundant CLI icons (T5.7)', () => {
     const extensionUri = { fsPath: '/mock/extension' } as never
 
-    it('(a) SessionNode with source=claude gets claude-icon.svg icon', () => {
+    it('(a) SessionNode with source=claude has no CLI icon', () => {
       const record = makeRecord({ source: 'claude' })
       const node: SessionNode = { kind: 'session', record, terminal: undefined }
       ;(vscode.window as unknown as { terminals: unknown[] }).terminals = []
@@ -1708,11 +1757,10 @@ describe('ClaudeTerminalProvider', () => {
         undefined, undefined, undefined, undefined, undefined, extensionUri,
       )
       const item = provider.getTreeItem(node as never)
-      const iconPath = item.iconPath as { fsPath: string }
-      expect(iconPath.fsPath).toContain('claude-icon.svg')
+      expect(item.iconPath).toBeUndefined()
     })
 
-    it('(b) SessionNode with source=codex gets codex-ai.svg icon', () => {
+    it('(b) SessionNode with source=codex has no CLI icon', () => {
       const record = makeRecord({ source: 'codex' })
       const node: SessionNode = { kind: 'session', record, terminal: undefined }
       ;(vscode.window as unknown as { terminals: unknown[] }).terminals = []
@@ -1720,8 +1768,7 @@ describe('ClaudeTerminalProvider', () => {
         undefined, undefined, undefined, undefined, undefined, extensionUri,
       )
       const item = provider.getTreeItem(node as never)
-      const iconPath = item.iconPath as { fsPath: string }
-      expect(iconPath.fsPath).toContain('codex-ai.svg')
+      expect(item.iconPath).toBeUndefined()
     })
 
     it('(c) SessionNode with source=claude and no slug/name shows Claude label', () => {
@@ -1753,7 +1800,7 @@ describe('ClaudeTerminalProvider', () => {
       expect(tooltip.value).toContain('codex-session-1')
     })
 
-    it('(f) SessionNode with unknown source gets claude-icon.svg (default)', () => {
+    it('(f) SessionNode with unknown source also has no CLI icon', () => {
       const record = makeRecord({ source: 'aider' })
       const node: SessionNode = { kind: 'session', record, terminal: undefined }
       ;(vscode.window as unknown as { terminals: unknown[] }).terminals = []
@@ -1761,8 +1808,7 @@ describe('ClaudeTerminalProvider', () => {
         undefined, undefined, undefined, undefined, undefined, extensionUri,
       )
       const item = provider.getTreeItem(node as never)
-      const iconPath = item.iconPath as { fsPath: string }
-      expect(iconPath.fsPath).toContain('claude-icon.svg')
+      expect(item.iconPath).toBeUndefined()
     })
 
     it('SessionNode with source=claude tooltip contains Claude Session', () => {
@@ -1775,13 +1821,13 @@ describe('ClaudeTerminalProvider', () => {
       expect(tooltip.value).toContain('Claude Session')
     })
 
-    it('SessionNode without extensionUri falls back to robot ThemeIcon regardless of source', () => {
+    it('SessionNode without extensionUri also has no CLI icon', () => {
       const record = makeRecord({ source: 'codex' })
       const node: SessionNode = { kind: 'session', record, terminal: undefined }
       ;(vscode.window as unknown as { terminals: unknown[] }).terminals = []
       const provider = new ClaudeTerminalProvider() // no extensionUri
       const item = provider.getTreeItem(node as never)
-      expect((item.iconPath as { id: string }).id).toBe('robot')
+      expect(item.iconPath).toBeUndefined()
     })
 
     it('SessionNode with source=codex and slug set uses slug as label, not Codex', () => {
@@ -1808,7 +1854,7 @@ describe('ClaudeTerminalProvider', () => {
       ...overrides,
     })
 
-    it('(a) RemoteTerminalNode with session source=codex shows codex-ai.svg icon', () => {
+    it('(a) RemoteTerminalNode with a Codex session has no redundant CLI icon', () => {
       ;(vscode.window as unknown as { terminals: unknown[] }).terminals = []
       const provider = new ClaudeTerminalProvider(
         undefined, undefined, undefined, undefined, undefined, extensionUri,
@@ -1828,8 +1874,12 @@ describe('ClaudeTerminalProvider', () => {
         },
       }
       const item = provider.getTreeItem(node)
-      const iconPath = item.iconPath as { fsPath: string }
-      expect(iconPath.fsPath).toContain('codex-ai.svg')
+      expect(item.iconPath).toBeUndefined()
+      expect(item.label).toBe('Codex')
+      expect(item.description).toBe('Running — working on task')
+      expect((item.resourceUri as { query: string }).query).toBe(
+        'status=%E2%86%BB',
+      )
     })
 
     it('(b) RemoteTerminalNode with session source=codex and no slug shows Codex label', () => {
@@ -1891,9 +1941,13 @@ describe('ClaudeTerminalProvider', () => {
       const item = provider.getTreeItem(node)
       expect(item.label as string).toContain('Codex: codex-ab')
       expect(item.label as string).not.toContain('Claude')
+      expect(item.description).toBe('Running')
+      expect((item.resourceUri as { query: string }).query).toBe(
+        'status=%E2%86%BB',
+      )
     })
 
-    it('(e) RemoteSessionNode with source=codex shows codex-ai.svg icon', () => {
+    it('(e) RemoteSessionNode with source=codex has no redundant CLI icon', () => {
       ;(vscode.window as unknown as { terminals: unknown[] }).terminals = []
       const provider = new ClaudeTerminalProvider(
         undefined, undefined, undefined, undefined, undefined, extensionUri,
@@ -1908,11 +1962,10 @@ describe('ClaudeTerminalProvider', () => {
         source: 'codex',
       }
       const item = provider.getTreeItem(node)
-      const iconPath = item.iconPath as { fsPath: string }
-      expect(iconPath.fsPath).toContain('codex-ai.svg')
+      expect(item.iconPath).toBeUndefined()
     })
 
-    it('(f) RemoteTerminalNode with session source=claude shows claude-icon.svg', () => {
+    it('(f) RemoteTerminalNode with a Claude session has no redundant CLI icon', () => {
       ;(vscode.window as unknown as { terminals: unknown[] }).terminals = []
       const provider = new ClaudeTerminalProvider(
         undefined, undefined, undefined, undefined, undefined, extensionUri,
@@ -1932,8 +1985,7 @@ describe('ClaudeTerminalProvider', () => {
         },
       }
       const item = provider.getTreeItem(node)
-      const iconPath = item.iconPath as { fsPath: string }
-      expect(iconPath.fsPath).toContain('claude-icon.svg')
+      expect(item.iconPath).toBeUndefined()
     })
 
     it('(g) RemoteTerminalNode without session source defaults to Claude behavior', () => {
@@ -1955,12 +2007,11 @@ describe('ClaudeTerminalProvider', () => {
         },
       }
       const item = provider.getTreeItem(node)
-      const iconPath = item.iconPath as { fsPath: string }
-      expect(iconPath.fsPath).toContain('claude-icon.svg')
+      expect(item.iconPath).toBeUndefined()
       expect(item.label as string).not.toContain('Codex')
     })
 
-    it('(h) RemoteSessionNode without source defaults to Claude label and icon', () => {
+    it('(h) RemoteSessionNode without source defaults to Claude label and no icon', () => {
       ;(vscode.window as unknown as { terminals: unknown[] }).terminals = []
       const provider = new ClaudeTerminalProvider(
         undefined, undefined, undefined, undefined, undefined, extensionUri,
@@ -1975,8 +2026,7 @@ describe('ClaudeTerminalProvider', () => {
       }
       const item = provider.getTreeItem(node)
       expect(item.label as string).toContain('Claude: abc12345')
-      const iconPath = item.iconPath as { fsPath: string }
-      expect(iconPath.fsPath).toContain('claude-icon.svg')
+      expect(item.iconPath).toBeUndefined()
     })
 
     it('(i) getTerminalInfoForRegistry includes source from session record', async () => {
@@ -2034,8 +2084,8 @@ describe('ClaudeTerminalProvider', () => {
   describe('mixed Claude and Codex sessions (T5.11)', () => {
     const extensionUri = { fsPath: '/mock/extension' } as never
 
-    // Test 2.2 — Mixed sessions with correct icons
-    it('both Claude and Codex sessions appear with correct icons', () => {
+    // Test 2.2 — Mixed sessions retain source labels without redundant icons
+    it('both Claude and Codex sessions appear without redundant icons', () => {
       ;(vscode.window as unknown as { terminals: unknown[] }).terminals = []
       const claudeRecord = makeRecord({
         sessionId: 'claude-1',
@@ -2067,12 +2117,8 @@ describe('ClaudeTerminalProvider', () => {
       const claudeItem = provider.getTreeItem(claudeNode as never)
       const codexItem = provider.getTreeItem(codexNode as never)
 
-      expect(
-        (claudeItem.iconPath as { fsPath: string }).fsPath,
-      ).toContain('claude-icon.svg')
-      expect(
-        (codexItem.iconPath as { fsPath: string }).fsPath,
-      ).toContain('codex-ai.svg')
+      expect(claudeItem.iconPath).toBeUndefined()
+      expect(codexItem.iconPath).toBeUndefined()
       expect(claudeItem.label).toBe('Claude')
       expect(codexItem.label).toBe('Codex')
     })

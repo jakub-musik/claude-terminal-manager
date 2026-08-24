@@ -2,7 +2,7 @@
   "name": "claude-terminal-manager",
   "displayName": "Agent Terminal Manager",
   "description": "Track AI agent sessions (Claude, Codex) in VS Code terminals with sidebar panel",
-  "version": "1.1.16",
+  "version": "1.1.17",
   "publisher": "jakub-musik",
   "license": "MIT",
   "type": "module",
@@ -210,6 +210,11 @@
           "type": "boolean",
           "default": true,
           "description": "Show terminals from all VS Code windows in the sidebar, not just the current window. Remote terminals show the project name next to their label."
+        },
+        "claudeTerminalManager.windowFocus.useMacOSAccessibility": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "On macOS, activate remote VS Code windows with the Accessibility API instead of the `code` CLI. This is faster, but requires Visual Studio Code to have Accessibility permission. If activation fails or the window title is ambiguous, the extension falls back to the `code` CLI."
         },
         "claudeTerminalManager.keyboard.enableTerminalShortcuts": {
           "type": "boolean",

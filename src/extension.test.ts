@@ -11,6 +11,7 @@ const {
   mockClearAttentionLocal,
   mockGetSessionForTerminal,
   mockGetTerminalPid,
+  mockGetConfiguration,
 } = vi.hoisted(() => ({
   mockDispose: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
   mockRunFork: vi.fn(),
@@ -20,6 +21,9 @@ const {
   mockClearAttentionLocal: vi.fn(),
   mockGetSessionForTerminal: vi.fn(),
   mockGetTerminalPid: vi.fn(),
+  mockGetConfiguration: vi.fn(
+    (_key: string, defaultValue: unknown) => defaultValue,
+  ),
 }))
 
 vi.mock('vscode', () => ({
@@ -29,9 +33,10 @@ vi.mock('vscode', () => ({
   },
   Uri: {
     parse: vi.fn((s: string) => s),
-    from: vi.fn((components: { scheme: string; path: string }) => ({
+    from: vi.fn((components: { scheme: string; path: string; query?: string }) => ({
       scheme: components.scheme,
       path: components.path,
+      query: components.query ?? '',
       toString: () => `${components.scheme}:${components.path}`,
     })),
   },
@@ -57,7 +62,7 @@ vi.mock('vscode', () => ({
   },
   workspace: {
     name: 'test-workspace',
-    getConfiguration: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(true) }),
+    getConfiguration: vi.fn().mockReturnValue({ get: mockGetConfiguration }),
     onDidChangeConfiguration: vi.fn().mockReturnValue({ dispose: vi.fn() }),
     createFileSystemWatcher: vi.fn().mockImplementation(() => ({
       onDidChange: vi.fn(),
@@ -91,6 +96,12 @@ vi.mock('vscode', () => ({
     }
   },
   ThemeIcon: class {
+    id: string
+    constructor(id: string) {
+      this.id = id
+    }
+  },
+  ThemeColor: class {
     id: string
     constructor(id: string) {
       this.id = id
@@ -174,6 +185,9 @@ describe('extension', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockDispose.mockResolvedValue(undefined)
+    mockGetConfiguration.mockImplementation(
+      (_key: string, defaultValue: unknown) => defaultValue,
+    )
   })
 
   describe('activate', () => {
@@ -211,6 +225,49 @@ describe('extension', () => {
           provideFileDecoration: expect.any(Function),
         }),
       )
+    })
+
+    it.each([
+      ['status=%E2%97%8B', '○'],
+      ['status=%E2%97%8F', '●'],
+      ['status=%E2%86%BB', '↻'],
+    ])('renders %s in the far-right decoration slot', (query, expected) => {
+      const ctx = makeContext('/storage')
+      extension.activate(ctx as never)
+
+      const decorationProvider = vi.mocked(
+        vscode.window.registerFileDecorationProvider,
+      ).mock.calls[0]?.[0]
+      expect(decorationProvider).toBeDefined()
+
+      const decoration = decorationProvider!.provideFileDecoration(
+        { scheme: 'ctm', query } as vscode.Uri,
+        {} as vscode.CancellationToken,
+      ) as vscode.FileDecoration
+
+      expect(decoration.badge).toBe(expected)
+      expect(decoration.tooltip).toBe(expected)
+    })
+
+    it('renders remote session status without the local highlight color', () => {
+      const ctx = makeContext('/storage')
+      extension.activate(ctx as never)
+
+      const decorationProvider = vi.mocked(
+        vscode.window.registerFileDecorationProvider,
+      ).mock.calls[0]?.[0]
+      const decoration = decorationProvider!.provideFileDecoration(
+        {
+          scheme: 'ctm-status',
+          query: 'status=%E2%86%BB',
+        } as vscode.Uri,
+        {} as vscode.CancellationToken,
+      ) as vscode.FileDecoration
+
+      expect(decoration).toEqual({
+        badge: '↻',
+        tooltip: '↻',
+      })
     })
 
     it('creates storage bin directory and copies reporter script', () => {
@@ -686,6 +743,116 @@ describe('extension', () => {
       })
 
       expect(mockExecFile).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('activateWindow via macOS Accessibility', () => {
+    const useDarwinPlatform = (): (() => void) => {
+      const originalPlatform = process.platform
+      Object.defineProperty(process, 'platform', { value: 'darwin' })
+      return () => {
+        Object.defineProperty(process, 'platform', { value: originalPlatform })
+      }
+    }
+
+    const enableMacOSAccessibility = (): void => {
+      mockGetConfiguration.mockImplementation(
+        (key: string, defaultValue: unknown) =>
+          key === 'windowFocus.useMacOSAccessibility' ? true : defaultValue,
+      )
+    }
+
+    it('raises the uniquely matching VS Code window with osascript', () => {
+      const restorePlatform = useDarwinPlatform()
+      try {
+        enableMacOSAccessibility()
+        const ctx = makeContext('/storage')
+        extension.activate(ctx as never)
+
+        const calls = vi.mocked(vscode.commands.registerCommand).mock.calls
+        const match = calls.find(
+          ([cmd]) => cmd === 'claudeTerminalManager.focusRemoteTerminal',
+        )
+        expect(match).toBeDefined()
+
+        mockExecFile.mockClear()
+
+        const handler = match![1] as (node: RemoteTerminalNode) => void
+        handler({
+          kind: 'remoteTerminal',
+          windowId: 'win123',
+          terminalName: 'bash',
+          workspaceName: 'test-project',
+          workspaceFolderPath: '/home/user/test-project',
+          socketPath: '/tmp/test.sock',
+        })
+
+        expect(mockExecFile).toHaveBeenCalledTimes(1)
+        const [executable, args] = mockExecFile.mock.calls[0]!
+        expect(executable).toBe('/usr/bin/osascript')
+        expect(args).toEqual(
+          expect.arrayContaining([
+            '-e',
+            'test-project',
+            'com.microsoft.VSCode',
+          ]),
+        )
+        expect((args as string[])[1]).toContain(
+          'set targetWindowTitle to name of targetWindow as text',
+        )
+        expect((args as string[])[1]).toContain(
+          'set windowMenuBarItem to menu bar item',
+        )
+        expect((args as string[])[1]).toContain('action "AXPress"')
+      } finally {
+        restorePlatform()
+      }
+    })
+
+    it('falls back to code CLI when Accessibility activation fails', () => {
+      const restorePlatform = useDarwinPlatform()
+      try {
+        enableMacOSAccessibility()
+        const ctx = makeContext('/storage')
+        extension.activate(ctx as never)
+
+        const calls = vi.mocked(vscode.commands.registerCommand).mock.calls
+        const match = calls.find(
+          ([cmd]) => cmd === 'claudeTerminalManager.focusRemoteTerminal',
+        )
+        expect(match).toBeDefined()
+
+        mockExecFile.mockClear()
+        mockExecFile.mockImplementationOnce(
+          (
+            _executable: string,
+            _args: string[],
+            callback: (error: Error | null) => void,
+          ) => {
+            callback(new Error('Accessibility permission denied'))
+          },
+        )
+
+        const handler = match![1] as (node: RemoteTerminalNode) => void
+        handler({
+          kind: 'remoteTerminal',
+          windowId: 'win123',
+          terminalName: 'bash',
+          workspaceName: 'test-project',
+          workspaceFolderPath: '/home/user/test-project',
+          socketPath: '/tmp/test.sock',
+        })
+
+        expect(mockExecFile).toHaveBeenCalledTimes(2)
+        expect(mockExecFile.mock.calls[0]![0]).toBe('/usr/bin/osascript')
+        expect(mockExecFile.mock.calls[1]![0]).toBe('code')
+        expect(mockExecFile.mock.calls[1]![1]).toEqual([
+          '-r',
+          '/home/user/test-project',
+        ])
+      } finally {
+        restorePlatform()
+      }
     })
   })
 

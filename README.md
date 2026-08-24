@@ -9,7 +9,7 @@ A VS Code extension that tracks AI agent sessions (Claude, Codex) in VS Code ter
 - **Python 3** must be available as `python3` (used by the hook reporter script for JSON parsing and socket communication)
 - **Git** — used to detect the current branch for sidebar labels. Branch detection fails gracefully if git is not installed, but labels will be missing.
 - **`ps`** (Unix) — used to walk the process tree and match Claude sessions to their VS Code terminals. Pre-installed on macOS and Linux.
-- **`code` CLI** (or `code-insiders`) — required for the multi-window feature to activate remote VS Code windows. Install via Command Palette → "Shell Command: Install 'code' command in PATH". Only needed if `showTerminalsFromAllWindows` is enabled.
+- **`code` CLI** (or `code-insiders`) — used by default, and as a fallback, to activate remote VS Code windows. Install via Command Palette → "Shell Command: Install 'code' command in PATH". On macOS, the optional Accessibility focus mode can usually avoid the CLI path.
 
 ## Installation
 
@@ -40,16 +40,16 @@ Each CLI agent session (Claude Code, Codex) is tracked through its full lifecycl
 |-------|---------------|
 | **SessionStart** | A new agent process starts (claude or codex). The extension records the session ID, PID, working directory, and git branch. |
 | **UserPromptSubmit** | You sent a prompt. The session status moves to **running** and the prompt text appears as a subtitle in the sidebar. |
-| **PreToolUse** | Claude is about to use a tool (e.g. Bash, Read, Write). With verbose mode enabled, the tool name is shown (e.g. "Running: Bash"). If the tool is `AskUserQuestion` or `ExitPlanMode`, the session is flagged as **needs attention**. |
+| **PreToolUse** | Claude is about to use a tool (e.g. Bash, Read, Write). Running sessions show a right-aligned ↻ indicator and put the current activity first in the session details (e.g. "Running: Bash"). If the tool is `AskUserQuestion` or `ExitPlanMode`, the session is flagged as **needs attention**. |
 | **Stop** | Claude finished responding and is waiting for your next prompt. The session is flagged as **needs attention**. |
 
 ### Session Status Indicators
 
 Sessions in the sidebar display visual indicators:
 
-- **●** (filled dot) — **Needs attention**: Claude has stopped and is waiting for input, or is asking a question. This is the initial indicator after a `Stop` or `AskUserQuestion` event.
-- **○** (open dot) — **Seen / waiting for input**: The user has clicked the session to acknowledge it, but has not yet submitted a new prompt. This clears the "needs attention" flag while the session remains idle.
-- No prefix — **Running**: Claude is actively processing
+- **↻** (right-aligned indicator) — **Running**: Claude or Codex is actively processing. The full "Running: _tool_" text appears first in the session details.
+- **●** (right-aligned filled dot) — **Needs attention**: Claude has stopped and is waiting for input, or is asking a question. This is the initial indicator after a `Stop` or `AskUserQuestion` event.
+- **○** (right-aligned open dot) — **Seen / waiting for input**: The user has clicked the session to acknowledge it, but has not yet submitted a new prompt. This clears the "needs attention" flag while the session remains idle.
 
 ### Session Naming & Slugs
 
@@ -70,15 +70,15 @@ When enabled, the sidebar shows terminals from **all open VS Code windows**, gro
 - **Local section** — terminals in the current window (labeled with workspace name and git branch)
 - **Remote sections** — terminals from other VS Code windows, each showing their workspace name and branch
 
-Each window publishes its terminal state to a shared registry file (heartbeat every 30s, stale entries pruned after 90s). Clicking a remote terminal sends a focus request via IPC and activates the target window using the `code` CLI (`code -r <folder>`, or `code-insiders -r` for Insiders builds).
+Each window publishes its terminal state to a shared registry file (heartbeat every 30s, stale entries pruned after 90s). Clicking a remote terminal sends a focus request via IPC and activates the target window using the `code` CLI (`code -r <folder>`, or `code-insiders -r` for Insiders builds). On macOS, an opt-in Accessibility mode can select the matching native window through VS Code's Window menu and falls back to the CLI if the window cannot be identified uniquely.
 
 ### Focus & Navigation
 
 | Action | What it does |
 |--------|--------------|
 | **Click a local session** | Shows that terminal and clears the "needs attention" flag |
-| **Click a remote terminal** | Sends a focus request to the owning window, which shows the terminal. The target window is activated via `code -r`. |
-| **Focus Window** (window icon on remote section header) | Activates the remote VS Code window via `code -r` |
+| **Click a remote terminal** | Sends a focus request to the owning window, which shows the terminal. The target window is activated via the configured focus mode. |
+| **Focus Window** (window icon on remote section header) | Activates the remote VS Code window via the configured focus mode |
 
 ### Session Reaper
 
@@ -106,7 +106,7 @@ The current git branch is detected every 5 seconds and displayed next to the wor
 
 1. The extension registers hooks in `~/.claude/settings.json` and `~/.codex/hooks.json` on activation.
 2. The hooks forward session lifecycle events (start, prompts, tool use, stop) to the extension via a Unix socket.
-3. The extension parses events, updates a state machine, and renders the live session tree in the sidebar. Claude and Codex sessions are distinguished by their source-specific icons.
+3. The extension parses events, updates a state machine, and renders the live session tree in the sidebar. Claude and Codex sessions are identified by their labels; redundant per-session CLI icons are omitted.
 
 ## Settings
 
@@ -114,19 +114,25 @@ The current git branch is detected every 5 seconds and displayed next to the wor
 
 **Default:** `false`
 
-Controls whether plain (non-agent) terminals appear in the sidebar. When `false`, only terminals with an active agent session are shown. When `true`, all open terminals are listed — terminals without an agent session show with a generic terminal icon, while agent sessions show with their source-specific icon (Claude or Codex).
+Controls whether plain (non-agent) terminals appear in the sidebar. When `false`, only terminals with an active agent session are shown. When `true`, all open terminals are listed — terminals without an agent session show with a generic terminal icon, while agent sessions use their Claude or Codex label without an additional CLI icon.
 
 ### `claudeTerminalManager.status.verboseToolNames`
 
 **Default:** `true`
 
-Controls whether the currently running tool name is displayed next to a session in the sidebar. When enabled, sessions show a status label like "Running: Bash" or "Running: Read" while Claude is executing a tool. When disabled, no tool name is shown — sessions just show the prompt subtitle.
+Controls whether the currently running tool name appears in the session details. When enabled, the details begin with text such as "Running: Bash" or "Running: Read". When disabled, they begin with just "Running". The right-aligned ↻ indicator is shown in either case.
 
 ### `claudeTerminalManager.sidebar.showTerminalsFromAllWindows`
 
 **Default:** `true`
 
 Controls whether terminals from other VS Code windows appear in the sidebar. When enabled, the sidebar is split into sections: a **local** section for the current window and a **remote** section for each other open VS Code window. Each section header shows the workspace name and git branch. When disabled, only terminals from the current window are shown.
+
+### `claudeTerminalManager.windowFocus.useMacOSAccessibility`
+
+**Default:** `false`
+
+On macOS, activates a specific remote VS Code window through the native Accessibility interface instead of launching the `code` CLI. Enable Visual Studio Code under **System Settings → Privacy & Security → Accessibility** before turning this on. The extension requires exactly one VS Code window title to match the remote workspace name; otherwise it falls back to `code -r`.
 
 ## Keyboard Shortcuts
 

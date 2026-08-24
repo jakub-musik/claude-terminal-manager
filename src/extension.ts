@@ -11,7 +11,10 @@ import { SocketServerLive, SocketConfig } from './socketServer.js'
 import { correlateSession } from './terminalCorrelator.js'
 import { ClaudeTerminalProvider } from './treeProvider.js'
 import type { SessionNode, TerminalNode, RemoteTerminalNode, SectionNode } from './treeProvider.js'
-import { getVerboseToolNames } from './settings.js'
+import {
+  getUseMacOSAccessibilityForWindowFocus,
+  getVerboseToolNames,
+} from './settings.js'
 import { resolveSessionSlug, readLatestSlug } from './slugResolver.js'
 import {
   writeWindowEntry,
@@ -30,6 +33,52 @@ import {
 const HOOK_MARKER = '--vscode-ctm'
 const CLAUDE_SETTINGS_PATH = path.join(os.homedir(), '.claude', 'settings.json')
 const CODEX_HOOKS_PATH = path.join(os.homedir(), '.codex', 'hooks.json')
+const MACOS_ACCESSIBILITY_FOCUS_SCRIPT = `
+on run argv
+  set needle to item 1 of argv
+  set targetBundleId to item 2 of argv
+
+  tell application "System Events"
+    set codeProcess to first application process whose bundle identifier is targetBundleId
+
+    tell codeProcess
+      set exactMatchingWindows to {}
+      set looselyMatchingWindows to {}
+
+      repeat with candidateWindow in windows
+        set windowTitle to name of candidateWindow as text
+        set isExactSegment to windowTitle is needle or windowTitle starts with (needle & " — ") or windowTitle ends with (" — " & needle) or windowTitle contains (" — " & needle & " — ") or windowTitle starts with (needle & " - ") or windowTitle ends with (" - " & needle) or windowTitle contains (" - " & needle & " - ")
+
+        if isExactSegment then
+          set end of exactMatchingWindows to candidateWindow
+        else if windowTitle contains needle then
+          set end of looselyMatchingWindows to candidateWindow
+        end if
+      end repeat
+
+      if (count of exactMatchingWindows) is 1 then
+        set targetWindow to item 1 of exactMatchingWindows
+      else if (count of exactMatchingWindows) is 0 and (count of looselyMatchingWindows) is 1 then
+        set targetWindow to item 1 of looselyMatchingWindows
+      else
+        error "Could not identify one VS Code window: exact=" & ((count of exactMatchingWindows) as text) & ", loose=" & ((count of looselyMatchingWindows) as text)
+      end if
+
+      set targetWindowTitle to name of targetWindow as text
+      set frontmost to true
+
+      -- Raising an AX window does not reliably switch to its macOS Space.
+      -- The Window menu selects the exact native window and handles Spaces.
+      set menuBarItemCount to count of menu bar items of menu bar 1
+      if menuBarItemCount is less than 2 then
+        error "Could not find the VS Code Window menu"
+      end if
+      set windowMenuBarItem to menu bar item (menuBarItemCount - 1) of menu bar 1
+      perform action "AXPress" of menu item targetWindowTitle of menu 1 of windowMenuBarItem
+    end tell
+  end tell
+end run
+`
 
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
 function writeClaudeHooks(reporterPath: string): void {
@@ -252,9 +301,11 @@ let _runtime: { dispose(): Promise<void> } | undefined
 export function activate(context: vscode.ExtensionContext): void {
   const codeCli = vscode.env.appName.includes('Insiders') ? 'code-insiders' : 'code'
 
-  const activateWindow = (folderPath: string | undefined): void => {
+  const activateWithCodeCli = (folderPath: string | undefined): void => {
     if (folderPath === undefined) {
-      outputChannel.appendLine('[CTM] activateWindow: no folderPath — skipping')
+      outputChannel.appendLine(
+        '[CTM] activateWindow: no folderPath for code CLI fallback — skipping',
+      )
       return
     }
     outputChannel.appendLine(`[CTM] activateWindow: ${codeCli} -r ${folderPath}`)
@@ -263,6 +314,40 @@ export function activate(context: vscode.ExtensionContext): void {
         outputChannel.appendLine(`[CTM] activateWindow failed: ${err.message}`)
       }
     })
+  }
+
+  const activateWindow = (
+    folderPath: string | undefined,
+    workspaceName: string | undefined,
+  ): void => {
+    const useMacOSAccessibility =
+      process.platform === 'darwin' &&
+      getUseMacOSAccessibilityForWindowFocus()
+
+    if (!useMacOSAccessibility || workspaceName === undefined) {
+      activateWithCodeCli(folderPath)
+      return
+    }
+
+    const bundleId = vscode.env.appName.includes('Insiders')
+      ? 'com.microsoft.VSCodeInsiders'
+      : 'com.microsoft.VSCode'
+
+    outputChannel.appendLine(
+      `[CTM] activateWindow: macOS Accessibility window="${workspaceName}"`,
+    )
+    childProcess.execFile(
+      '/usr/bin/osascript',
+      ['-e', MACOS_ACCESSIBILITY_FOCUS_SCRIPT, workspaceName, bundleId],
+      (err) => {
+        if (err === null) return
+
+        outputChannel.appendLine(
+          `[CTM] macOS Accessibility activation failed: ${err.message}; falling back to ${codeCli}`,
+        )
+        activateWithCodeCli(folderPath)
+      },
+    )
   }
 
   const outputChannel = vscode.window.createOutputChannel(
@@ -508,16 +593,29 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   )
 
-  const localDecorationProvider: vscode.FileDecorationProvider = {
+  const terminalDecorationProvider: vscode.FileDecorationProvider = {
     provideFileDecoration(uri: vscode.Uri) {
-      if (uri.scheme === 'ctm') {
-        return { color: new vscode.ThemeColor('terminal.ansiGreen') }
+      if (uri.scheme !== 'ctm' && uri.scheme !== 'ctm-status') {
+        return undefined
       }
-      return undefined
+
+      const status = new URLSearchParams(uri.query).get('status')
+      const safeStatus = status?.replace(/["\\\r\n]/g, '')
+      if (uri.scheme === 'ctm') {
+        return {
+          ...(safeStatus === undefined || safeStatus.length === 0
+            ? {}
+            : { badge: safeStatus, tooltip: safeStatus }),
+          color: new vscode.ThemeColor('terminal.ansiGreen'),
+        }
+      }
+      return safeStatus === undefined || safeStatus.length === 0
+        ? undefined
+        : { badge: safeStatus, tooltip: safeStatus }
     },
   }
   context.subscriptions.push(
-    vscode.window.registerFileDecorationProvider(localDecorationProvider),
+    vscode.window.registerFileDecorationProvider(terminalDecorationProvider),
   )
 
   // Write initial entry and prune stale/duplicate entries from crashed or reloaded windows
@@ -914,8 +1012,8 @@ export function activate(context: vscode.ExtensionContext): void {
       runtime.runFork(
         writeFocusRequest(globalStoragePath, node.windowId, node.terminalName, node.pid, node.session?.sessionId),
       )
-      // Activate the target window via `code -r <folder>` (handles Space switching)
-      activateWindow(node.workspaceFolderPath)
+      // Activate the target window with the configured strategy.
+      activateWindow(node.workspaceFolderPath, node.workspaceName)
     },
   )
   context.subscriptions.push(focusRemoteDisposable)
@@ -936,7 +1034,7 @@ export function activate(context: vscode.ExtensionContext): void {
       outputChannel.appendLine(
         `[CTM] focusWindow: folderPath=${node.workspaceFolderPath ?? 'undefined'}`,
       )
-      activateWindow(node.workspaceFolderPath)
+      activateWindow(node.workspaceFolderPath, node.workspaceName)
     },
   )
   context.subscriptions.push(focusWindowDisposable)
