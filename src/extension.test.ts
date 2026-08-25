@@ -227,11 +227,7 @@ describe('extension', () => {
       )
     })
 
-    it.each([
-      ['status=%E2%97%8B', '○'],
-      ['status=%E2%97%8F', '●'],
-      ['status=%E2%86%BB', '↻'],
-    ])('renders %s in the far-right decoration slot', (query, expected) => {
+    it('uses file decorations only to highlight local tree items', () => {
       const ctx = makeContext('/storage')
       extension.activate(ctx as never)
 
@@ -240,34 +236,22 @@ describe('extension', () => {
       ).mock.calls[0]?.[0]
       expect(decorationProvider).toBeDefined()
 
-      const decoration = decorationProvider!.provideFileDecoration(
-        { scheme: 'ctm', query } as vscode.Uri,
+      const localDecoration = decorationProvider!.provideFileDecoration(
+        { scheme: 'ctm', query: '' } as vscode.Uri,
         {} as vscode.CancellationToken,
       ) as vscode.FileDecoration
-
-      expect(decoration.badge).toBe(expected)
-      expect(decoration.tooltip).toBe(expected)
-    })
-
-    it('renders remote session status without the local highlight color', () => {
-      const ctx = makeContext('/storage')
-      extension.activate(ctx as never)
-
-      const decorationProvider = vi.mocked(
-        vscode.window.registerFileDecorationProvider,
-      ).mock.calls[0]?.[0]
-      const decoration = decorationProvider!.provideFileDecoration(
+      const remoteDecoration = decorationProvider!.provideFileDecoration(
         {
           scheme: 'ctm-status',
-          query: 'status=%E2%86%BB',
+          query: '',
         } as vscode.Uri,
         {} as vscode.CancellationToken,
-      ) as vscode.FileDecoration
+      )
 
-      expect(decoration).toEqual({
-        badge: '↻',
-        tooltip: '↻',
+      expect(localDecoration).toEqual({
+        color: expect.objectContaining({ id: 'terminal.ansiGreen' }),
       })
+      expect(remoteDecoration).toBeUndefined()
     })
 
     it('creates storage bin directory and copies reporter script', () => {

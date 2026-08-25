@@ -593,29 +593,15 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   )
 
-  const terminalDecorationProvider: vscode.FileDecorationProvider = {
+  const localDecorationProvider: vscode.FileDecorationProvider = {
     provideFileDecoration(uri: vscode.Uri) {
-      if (uri.scheme !== 'ctm' && uri.scheme !== 'ctm-status') {
-        return undefined
-      }
-
-      const status = new URLSearchParams(uri.query).get('status')
-      const safeStatus = status?.replace(/["\\\r\n]/g, '')
-      if (uri.scheme === 'ctm') {
-        return {
-          ...(safeStatus === undefined || safeStatus.length === 0
-            ? {}
-            : { badge: safeStatus, tooltip: safeStatus }),
-          color: new vscode.ThemeColor('terminal.ansiGreen'),
-        }
-      }
-      return safeStatus === undefined || safeStatus.length === 0
-        ? undefined
-        : { badge: safeStatus, tooltip: safeStatus }
+      return uri.scheme === 'ctm'
+        ? { color: new vscode.ThemeColor('terminal.ansiGreen') }
+        : undefined
     },
   }
   context.subscriptions.push(
-    vscode.window.registerFileDecorationProvider(terminalDecorationProvider),
+    vscode.window.registerFileDecorationProvider(localDecorationProvider),
   )
 
   // Write initial entry and prune stale/duplicate entries from crashed or reloaded windows

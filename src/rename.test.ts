@@ -417,7 +417,7 @@ describe('ClaudeTerminalProvider with workspaceState', () => {
     expect(item.label).toBe('Claude')
   })
 
-  it('workspaceState name has a right-aligned filled dot when waiting_for_input', () => {
+  it('workspaceState name keeps the leading filled status icon when waiting_for_input', () => {
     const ws = makeWorkspaceState()
     ws.get.mockReturnValue('My Session')
 
@@ -433,9 +433,7 @@ describe('ClaudeTerminalProvider with workspaceState', () => {
     const item = provider.getTreeItem(node)
 
     expect(item.label).toBe('My Session')
-    expect((item.resourceUri as { query: string }).query).toBe(
-      'status=%E2%97%8F',
-    )
+    expect((item.iconPath as { id: string }).id).toBe('circle-filled')
   })
 
   it('getTreeItem works without workspaceState (undefined)', () => {

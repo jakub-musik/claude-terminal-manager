@@ -40,16 +40,16 @@ Each CLI agent session (Claude Code, Codex) is tracked through its full lifecycl
 |-------|---------------|
 | **SessionStart** | A new agent process starts (claude or codex). The extension records the session ID, PID, working directory, and git branch. |
 | **UserPromptSubmit** | You sent a prompt. The session status moves to **running** and the prompt text appears as a subtitle in the sidebar. |
-| **PreToolUse** | Claude is about to use a tool (e.g. Bash, Read, Write). Running sessions show a right-aligned ↻ indicator and put the current activity first in the session details (e.g. "Running: Bash"). If the tool is `AskUserQuestion` or `ExitPlanMode`, the session is flagged as **needs attention**. |
+| **PreToolUse** | Claude is about to use a tool (e.g. Bash, Read, Write). Running sessions show a leading activity indicator and put the current activity after the CLI name (e.g. "Codex Running: Bash — _topic_"). If the tool is `AskUserQuestion` or `ExitPlanMode`, the session is flagged as **needs attention**. |
 | **Stop** | Claude finished responding and is waiting for your next prompt. The session is flagged as **needs attention**. |
 
 ### Session Status Indicators
 
 Sessions in the sidebar display visual indicators:
 
-- **↻** (right-aligned indicator) — **Running**: Claude or Codex is actively processing. The full "Running: _tool_" text appears first in the session details.
-- **●** (right-aligned filled dot) — **Needs attention**: Claude has stopped and is waiting for input, or is asking a question. This is the initial indicator after a `Stop` or `AskUserQuestion` event.
-- **○** (right-aligned open dot) — **Seen / waiting for input**: The user has clicked the session to acknowledge it, but has not yet submitted a new prompt. This clears the "needs attention" flag while the session remains idle.
+- **Spinning sync icon** (before the number) — **Running**: Claude or Codex is actively processing. The full "Running: _tool_" text follows the CLI name and precedes the topic.
+- **Filled circle** (before the number) — **Needs attention**: Claude has stopped and is waiting for input, or is asking a question. This is the initial indicator after a `Stop` or `AskUserQuestion` event.
+- **Hollow circle** (before the number) — **Seen / waiting for input**: The user has clicked the session to acknowledge it, but has not yet submitted a new prompt. This clears the "needs attention" flag while the session remains idle.
 
 ### Session Naming & Slugs
 
@@ -120,7 +120,7 @@ Controls whether plain (non-agent) terminals appear in the sidebar. When `false`
 
 **Default:** `true`
 
-Controls whether the currently running tool name appears in the session details. When enabled, the details begin with text such as "Running: Bash" or "Running: Read". When disabled, they begin with just "Running". The right-aligned ↻ indicator is shown in either case.
+Controls whether the currently running tool name appears after the CLI name. When enabled, the details begin with text such as "Running: Bash" or "Running: Read". When disabled, they begin with just "Running". The leading spinning activity indicator is shown in either case.
 
 ### `claudeTerminalManager.sidebar.showTerminalsFromAllWindows`
 

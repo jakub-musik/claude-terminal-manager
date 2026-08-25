@@ -355,14 +355,13 @@ export class ClaudeTerminalProvider
     }))
   }
 
-  private _getSessionStatusBadge(
+  private _getSessionStatusIcon(
     status: string,
     needsAttention: boolean,
-  ): string | undefined {
-    if (needsAttention) return '●'
-    if (status === 'running') return '↻'
-    if (status === 'waiting_for_input') return '○'
-    return undefined
+  ): vscode.ThemeIcon {
+    if (needsAttention) return new vscode.ThemeIcon('circle-filled')
+    if (status === 'running') return new vscode.ThemeIcon('sync~spin')
+    return new vscode.ThemeIcon('circle-outline')
   }
 
   private _getSessionDescription(
@@ -379,15 +378,8 @@ export class ClaudeTerminalProvider
   private _getSessionResourceUri(
     scheme: 'ctm' | 'ctm-status',
     path: string,
-    statusBadge: string | undefined,
   ): vscode.Uri {
-    return vscode.Uri.from({
-      scheme,
-      path,
-      ...(statusBadge === undefined
-        ? {}
-        : { query: `status=${encodeURIComponent(statusBadge)}` }),
-    })
+    return vscode.Uri.from({ scheme, path })
   }
 
   getTreeItem(node: TreeNode): vscode.TreeItem {
@@ -461,7 +453,7 @@ export class ClaudeTerminalProvider
         title: 'Focus Terminal',
         arguments: [node],
       }
-      const statusBadge = this._getSessionStatusBadge(
+      item.iconPath = this._getSessionStatusIcon(
         node.record.status,
         effectiveNeedsAttention,
       )
@@ -494,7 +486,6 @@ export class ClaudeTerminalProvider
       item.resourceUri = this._getSessionResourceUri(
         'ctm',
         '/session/' + node.record.sessionId,
-        statusBadge,
       )
       return item
     }
@@ -525,7 +516,7 @@ export class ClaudeTerminalProvider
         arguments: [node],
       }
       if (node.session !== undefined) {
-        const statusBadge = this._getSessionStatusBadge(
+        item.iconPath = this._getSessionStatusIcon(
           node.session.status,
           needsAttention,
         )
@@ -540,7 +531,6 @@ export class ClaudeTerminalProvider
         item.resourceUri = this._getSessionResourceUri(
           'ctm-status',
           `/remote-session/${node.windowId}/${node.session.sessionId}`,
-          statusBadge,
         )
       }
       const remoteToolName = remoteSource === 'codex' ? 'Codex' : 'Claude'
@@ -570,7 +560,7 @@ export class ClaudeTerminalProvider
         label,
         vscode.TreeItemCollapsibleState.None,
       )
-      const statusBadge = this._getSessionStatusBadge(
+      item.iconPath = this._getSessionStatusIcon(
         node.status,
         needsAttention,
       )
@@ -595,7 +585,6 @@ export class ClaudeTerminalProvider
       item.resourceUri = this._getSessionResourceUri(
         'ctm-status',
         '/remote-session/' + node.sessionId,
-        statusBadge,
       )
       return item
     }
