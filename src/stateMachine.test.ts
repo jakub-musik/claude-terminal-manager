@@ -385,6 +385,29 @@ describe('transitionSession', () => {
     })
   })
 
+  describe('ToolInterrupted (tool_interrupted)', () => {
+    it('moves to waiting without requesting attention and clears tool state', () => {
+      const r = {
+        ...createSession(makeStart()),
+        status: 'running' as const,
+        statusLabel: 'Running: Bash',
+        needsAttention: true,
+        activeBlockingTool: 'Bash',
+      }
+      const event: HookEvent = {
+        event: 'tool_interrupted',
+        session_id: 'test-session',
+        tool_name: 'Bash',
+        source: 'claude',
+      }
+      const result = transitionSession(r, event)
+      expect(result.status).toBe('waiting_for_input')
+      expect(result.statusLabel).toBeUndefined()
+      expect(result.needsAttention).toBe(false)
+      expect(result.activeBlockingTool).toBeUndefined()
+    })
+  })
+
   describe('SessionEnd (session_end)', () => {
     it('transitions to inactive from any status', () => {
       const statuses = [

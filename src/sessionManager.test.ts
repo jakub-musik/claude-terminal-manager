@@ -21,6 +21,12 @@ const stop = (session_id: string): HookEvent => ({
   session_id,
 })
 
+const toolInterrupted = (session_id: string): HookEvent => ({
+  event: 'tool_interrupted',
+  session_id,
+  tool_name: 'Bash',
+})
+
 const sessionEnd = (session_id: string, pid = 42): HookEvent => ({
   event: 'session_end',
   session_id,
@@ -376,6 +382,20 @@ describe('SessionManager', () => {
   )
 
   // ─── clearAttention tests ────────────────────────────────────────────────
+
+  it.effect('ToolInterrupted clears the running tool without raising attention', () =>
+    Effect.gen(function* () {
+      const mgr = yield* SessionManager
+      yield* mgr.processEvent(sessionStart('s1'))
+      yield* mgr.processEvent(userPromptSubmit('s1', 'do work'))
+      yield* mgr.processEvent(preToolUse('s1', 'Bash'))
+      yield* mgr.processEvent(toolInterrupted('s1'))
+      const record = (yield* mgr.get('s1'))!
+      expect(record.status).toBe('waiting_for_input')
+      expect(record.statusLabel).toBeUndefined()
+      expect(record.needsAttention).toBe(false)
+    }).pipe(Effect.provide(makeSessionManagerLive(() => true))),
+  )
 
   it.effect('clearAttention clears needsAttention on a waiting session', () =>
     Effect.gen(function* () {

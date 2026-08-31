@@ -151,6 +151,52 @@ describe('bin/reporter', () => {
     expect(parsed['prompt']).toBe('hello world')
     expect('pid' in parsed).toBe(false)
   })
+
+  it('sends tool_interrupted for an interrupted PostToolUse result', async () => {
+    const sockPath = makeSockPath()
+    sockPaths.push(sockPath)
+
+    const line = await runReporter(
+      [],
+      {
+        session_id: 'sess-interrupted',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_response: { stdout: '', stderr: '', interrupted: true },
+      },
+      sockPath,
+    )
+
+    expect(JSON.parse(line)).toEqual({
+      event: 'tool_interrupted',
+      session_id: 'sess-interrupted',
+      source: 'claude',
+      tool_name: 'Bash',
+    })
+  })
+
+  it('sends tool_interrupted for an interrupt-style tool failure', async () => {
+    const sockPath = makeSockPath()
+    sockPaths.push(sockPath)
+
+    const line = await runReporter(
+      [],
+      {
+        session_id: 'sess-aborted',
+        hook_event_name: 'PostToolUseFailure',
+        tool_name: 'Bash',
+        is_interrupt: true,
+      },
+      sockPath,
+    )
+
+    expect(JSON.parse(line)).toEqual({
+      event: 'tool_interrupted',
+      session_id: 'sess-aborted',
+      source: 'claude',
+      tool_name: 'Bash',
+    })
+  })
 })
 
 describe('--source flag (T5.3)', () => {

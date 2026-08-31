@@ -58,6 +58,16 @@ EVENT_MAP = {
 }
 
 evt = EVENT_MAP.get(hook)
+# Claude does not fire Stop when the user interrupts a turn. A cancelled tool
+# is instead reported through PostToolUse (or, for abort-style failures,
+# PostToolUseFailure). Ignore ordinary successful/failed tool completions.
+if hook == 'PostToolUse':
+    response = data.get('tool_response', {})
+    if isinstance(response, dict) and response.get('interrupted') is True:
+        evt = 'tool_interrupted'
+elif hook == 'PostToolUseFailure' and data.get('is_interrupt') is True:
+    evt = 'tool_interrupted'
+
 if not (evt and sid):
     sys.exit(0)
 
@@ -93,6 +103,10 @@ elif hook == 'UserPromptSubmit':
     event['prompt'] = data.get('prompt', '')
 elif hook == 'PreToolUse':
     event['tool_name'] = data.get('tool_name', '')
+elif evt == 'tool_interrupted':
+    tool_name = data.get('tool_name', '')
+    if tool_name:
+        event['tool_name'] = tool_name
 
 line = json.dumps(event) + chr(10)
 sock_path = os.environ.get('_HOOK_SOCK', '')

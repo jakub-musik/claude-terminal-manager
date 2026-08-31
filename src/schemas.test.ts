@@ -118,6 +118,22 @@ describe('parseHookEvent', () => {
     }),
   )
 
+  it.effect('parses ToolInterruptedEvent', () =>
+    Effect.gen(function* () {
+      const result = yield* parseHookEvent({
+        event: 'tool_interrupted',
+        session_id: 'abc123',
+        tool_name: 'Bash',
+      })
+      expect(result).toEqual({
+        event: 'tool_interrupted',
+        session_id: 'abc123',
+        tool_name: 'Bash',
+        source: 'claude',
+      })
+    }),
+  )
+
   it.effect('parses SessionEndEvent', () =>
     Effect.gen(function* () {
       const result = yield* parseHookEvent({

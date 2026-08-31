@@ -94,6 +94,8 @@ function writeClaudeHooks(reporterPath: string): void {
     'SessionStart',
     'UserPromptSubmit',
     'PreToolUse',
+    'PostToolUse',
+    'PostToolUseFailure',
     'Stop',
   ]
 
@@ -198,7 +200,14 @@ export function writeCodexHooks(reporterPath: string): void {
   }
 
   const hooks: any = settings['hooks'] ?? {}
-  const events = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'Stop']
+  const events = [
+    'SessionStart',
+    'UserPromptSubmit',
+    'PreToolUse',
+    'PostToolUse',
+    'PostToolUseFailure',
+    'Stop',
+  ]
   const quoted = `'${reporterPath}'`
 
   for (const event of events) {
@@ -1170,15 +1179,5 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export async function deactivate(): Promise<void> {
-  try {
-    removeClaudeHooks()
-  } catch {
-    // best-effort cleanup
-  }
-  try {
-    removeCodexHooks()
-  } catch {
-    // best-effort cleanup
-  }
   await _runtime?.dispose()
 }

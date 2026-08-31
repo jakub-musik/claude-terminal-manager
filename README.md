@@ -41,6 +41,7 @@ Each CLI agent session (Claude Code, Codex) is tracked through its full lifecycl
 | **SessionStart** | A new agent process starts (claude or codex). The extension records the session ID, PID, working directory, and git branch. |
 | **UserPromptSubmit** | You sent a prompt. The session status moves to **running** and the prompt text appears as a subtitle in the sidebar. |
 | **PreToolUse** | Claude is about to use a tool (e.g. Bash, Read, Write). Running sessions show a leading activity indicator and put the current activity after the CLI name (e.g. "Codex Running: Bash — _topic_"). If the tool is `AskUserQuestion` or `ExitPlanMode`, the session is flagged as **needs attention**. |
+| **PostToolUse / PostToolUseFailure** | Interrupted tool executions (for example, a Bash process cancelled with Control-C) move the session back to **waiting for input** and clear the running activity indicator. Ordinary tool completions and failures are ignored. |
 | **Stop** | Claude finished responding and is waiting for your next prompt. The session is flagged as **needs attention**. |
 
 ### Session Status Indicators

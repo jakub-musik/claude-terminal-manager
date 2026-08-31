@@ -42,6 +42,16 @@ export const StopEvent = Schema.Struct({
   }),
 })
 
+export const ToolInterruptedEvent = Schema.Struct({
+  event: Schema.Literal('tool_interrupted'),
+  session_id: Schema.String,
+  tool_name: Schema.optionalWith(Schema.String, { exact: true }),
+  source: Schema.optionalWith(Schema.String, {
+    exact: true,
+    default: () => 'claude',
+  }),
+})
+
 export const SessionEndEvent = Schema.Struct({
   event: Schema.Literal('session_end'),
   session_id: Schema.String,
@@ -57,6 +67,7 @@ export const HookEvent = Schema.Union(
   UserPromptSubmitEvent,
   PreToolUseEvent,
   StopEvent,
+  ToolInterruptedEvent,
   SessionEndEvent,
 )
 
@@ -66,6 +77,9 @@ export type UserPromptSubmitEvent = Schema.Schema.Type<
 >
 export type PreToolUseEvent = Schema.Schema.Type<typeof PreToolUseEvent>
 export type StopEvent = Schema.Schema.Type<typeof StopEvent>
+export type ToolInterruptedEvent = Schema.Schema.Type<
+  typeof ToolInterruptedEvent
+>
 export type SessionEndEvent = Schema.Schema.Type<typeof SessionEndEvent>
 export type HookEvent = Schema.Schema.Type<typeof HookEvent>
 

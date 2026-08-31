@@ -957,20 +957,15 @@ describe('extension', () => {
       expect(logCalls.some((msg) => msg.includes('Codex hooks registered'))).toBe(true)
     })
 
-    it('(b) deactivate() calls removeCodexHooks (verified via writeFileSync for codex path)', async () => {
+    it('(b) deactivate() leaves persistent hooks installed', async () => {
       const ctx = makeContext('/storage')
       extension.activate(ctx as never)
 
       vi.mocked(fs.writeFileSync).mockClear()
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
-        SessionStart: [{ hooks: [{ type: 'command', command: 'reporter --vscode-ctm --source codex' }] }],
-      }))
 
       await extension.deactivate()
 
-      // removeCodexHooks reads and writes the codex hooks file
-      const writeCalls = vi.mocked(fs.writeFileSync).mock.calls
-      expect(writeCalls.length).toBeGreaterThan(0)
+      expect(fs.writeFileSync).not.toHaveBeenCalled()
     })
 
     it('(c) installHooks command calls both writeClaudeHooks and writeCodexHooks', () => {
@@ -1099,6 +1094,8 @@ describe('extension', () => {
       expect(hooks['SessionStart']).toBeDefined()
       expect(hooks['UserPromptSubmit']).toBeDefined()
       expect(hooks['PreToolUse']).toBeDefined()
+      expect(hooks['PostToolUse']).toBeDefined()
+      expect(hooks['PostToolUseFailure']).toBeDefined()
       expect(hooks['Stop']).toBeDefined()
     })
 

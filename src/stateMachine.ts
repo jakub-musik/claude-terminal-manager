@@ -77,6 +77,8 @@ export const createSessionFromEvent = (
     }
     case 'stop':
       return { ...base, status: 'waiting_for_input', needsAttention: true }
+    case 'tool_interrupted':
+      return { ...base, status: 'waiting_for_input' }
     case 'session_end':
       return { ...base, status: 'inactive' }
     default:
@@ -145,6 +147,16 @@ export const transitionSession = (
         status: 'waiting_for_input',
         statusLabel: undefined,
         needsAttention: true,
+        activeBlockingTool: undefined,
+        lastEventAt: now,
+      }
+
+    case 'tool_interrupted':
+      return {
+        ...record,
+        status: 'waiting_for_input',
+        statusLabel: undefined,
+        needsAttention: false,
         activeBlockingTool: undefined,
         lastEventAt: now,
       }
